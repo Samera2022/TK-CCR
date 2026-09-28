@@ -281,6 +281,7 @@ export async function createGatewayPlugin(input: GatewayPluginFactoryInput = {})
           "POST /v1/messages",
           "POST /v1/messages/count_tokens",
           "GET /__ccr/history/v1/threads?project_directory=...",
+          "GET /__ccr/integrations/v1",
           "POST /__ccr/history/v1/threads/{threadId}/messages",
           "GET /models",
           "GET /v1/models"
@@ -321,6 +322,14 @@ export async function createGatewayPlugin(input: GatewayPluginFactoryInput = {})
       priority: "pre",
       handler: async ({ request, reply }: { request: GatewayPluginHttpRequest; reply: GatewayPluginHttpReply }) =>
         handleHistoryRoute(config, request, reply, coreAuthToken, publicAuthKeys)
+    }, {
+      auth: "none",
+      key: "ccr-public-integrations-root",
+      method: "GET",
+      path: "/__ccr/integrations/v1",
+      priority: "pre",
+      handler: async ({ request, reply }: { request: GatewayPluginHttpRequest; reply: GatewayPluginHttpReply }) =>
+        handleIntegrationsRoute(config, request, reply, coreAuthToken, publicAuthKeys)
     }, {
       auth: "none",
       key: "ccr-public-wif-token",
@@ -726,6 +735,57 @@ async function handleHistoryRoute(
     url: request.url
   });
   return reply.code(result.status).send(result.body);
+}
+
+async function handleIntegrationsRoute(
+  config: AppConfig,
+  request: GatewayPluginHttpRequest,
+  reply: GatewayPluginHttpReply,
+  coreAuthToken: string | undefined,
+  publicAuthKeys: readonly string[]
+): Promise<unknown> {
+  const authorization = await resolvePublicGatewayAuth(config, request.headers, {
+    coreAuthToken,
+    publicAuthKeys,
+    rejectMissing: true,
+    url: request.url
+  });
+  if (!authorization.ok) return reply.code(authorization.status).send({ error: { message: authorization.error } });
+  return reply.code(200).send({
+    protocol: "ccr.integrations.v1",
+    skills: (config.integrations?.skills ?? []).filter((skill) => skill.enabled !== false).map(({ content, description, id, metadata, name, source }) => ({
+      content,
+      ...(description ? { description } : {}),
+      id,
+      ...(metadata ? { metadata } : {}),
+      name,
+      ...(source ? { source } : {})
+    })),
+    mcpServers: (config.integrations?.mcpServers ?? []).filter((server) => server.enabled !== false).map((server) => {
+      if (server.transport === "stdio") {
+        return {
+          args: server.args,
+          command: server.command,
+          ...(server.cwd ? { cwd: server.cwd } : {}),
+          env: server.env,
+          name: server.name,
+          protocolVersion: server.protocolVersion,
+          requestTimeoutMs: server.requestTimeoutMs,
+          startupTimeoutMs: server.startupTimeoutMs,
+          stdioMessageMode: server.stdioMessageMode,
+          transport: server.transport
+        };
+      }
+      return {
+        name: server.name,
+        protocolVersion: server.protocolVersion,
+        requestTimeoutMs: server.requestTimeoutMs,
+        startupTimeoutMs: server.startupTimeoutMs,
+        transport: server.transport,
+        url: server.url
+      };
+    })
+  });
 }
 
 function applyCodexBridgeRequestTransform(
