@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo } from "react";
 import { translateErrorMessage } from "@ccr/core/contracts/i18n";
 
-type NavigationId = "onboarding" | "overview" | "observability" | "api-keys" | "server" | "profile" | "networking" | "logs" | "providers" | "models" | "routing" | "virtual-models" | "extensions" | "provider-pool" | "order-list";
+type NavigationId = "onboarding" | "overview" | "observability" | "api-keys" | "server" | "profile" | "networking" | "logs" | "providers" | "models" | "routing" | "virtual-models" | "extensions" | "provider-pool" | "order-list" | "integrations";
 type ResolvedLanguage = "en" | "zh";
 
 export type AppCopy = {
@@ -117,6 +117,7 @@ export const appCopy: Record<ResolvedLanguage, AppCopy> = {
       overview: "Overview",
       "provider-pool": "Provider Pool",
       "order-list": "Order List",
+      integrations: "Skills & MCP",
       profile: "Agent Profiles",
       providers: "Providers",
       models: "Models",
@@ -750,6 +751,7 @@ export const appCopy: Record<ResolvedLanguage, AppCopy> = {
       overview: "概览",
       "provider-pool": "Provider池",
       "order-list": "顺序列表",
+      integrations: "Skills 与 MCP",
       profile: "Agent 配置档案",
       providers: "供应商",
       models: "模型",

@@ -28,6 +28,8 @@ import type {
   ClaudeCodeProfileConfig,
   CodexProfileConfig,
   ContextArchiveConfig,
+  CcrIntegrationsConfig,
+  CcrSkillConfig,
   GatewayAgentConfig,
   GatewayMcpServerConfig,
   GatewayMcpServerTransport,
@@ -287,6 +289,13 @@ export async function loadAppConfig(): Promise<AppConfig> {
         retentionDays: picked.contextArchive?.retentionDays ?? DEFAULT_CONFIG.contextArchive.retentionDays,
         storagePath: picked.contextArchive?.storagePath ?? DEFAULT_CONFIG.contextArchive.storagePath,
         toolName: picked.contextArchive?.toolName ?? DEFAULT_CONFIG.contextArchive.toolName
+      },
+      integrations: {
+        ...normalizeIntegrationsConfig(picked.integrations),
+        mcpServers: picked.integrations?.mcpServers ?? [
+          ...(picked.agent?.mcpServers ?? []),
+          ...(picked.toolHub?.mcpServers ?? [])
+        ]
       },
       gateway: {
         ...DEFAULT_CONFIG.gateway,
@@ -816,6 +825,10 @@ function pickConfig(value: Partial<AppConfig>): LoadedAppConfig {
   const contextArchive = parseContextArchive((value as Record<string, unknown>).contextArchive ?? (value as Record<string, unknown>).context_archive);
   if (contextArchive) {
     config.contextArchive = contextArchive;
+  }
+  const integrations = parseIntegrations((value as Record<string, unknown>).integrations);
+  if (integrations) {
+    config.integrations = normalizeIntegrationsConfig(integrations);
   }
   if (typeof value.autoStart === "boolean") {
     config.autoStart = value.autoStart;
@@ -2462,6 +2475,43 @@ function parseBotGatewayConversation(value: unknown): BotGatewayRuntimeConfig["c
     ...(platformConversationId ? { platformConversationId } : {}),
     ...(threadId ? { threadId } : {}),
     type
+  };
+}
+
+function parseIntegrations(value: unknown): Partial<CcrIntegrationsConfig> | undefined {
+  if (!isObject(value)) {
+    return undefined;
+  }
+  const parsedMcpServers = parseMcpServers(value.mcpServers);
+  const mcpServers = Array.isArray(value.mcpServers) ? (parsedMcpServers ?? []) : undefined;
+  const skills = Array.isArray(value.skills)
+    ? value.skills.flatMap((item): CcrSkillConfig[] => {
+        if (!isObject(item)) return [];
+        const id = readString(item.id);
+        const name = readString(item.name) || id;
+        const content = readString(item.content);
+        if (!id || !name || content === undefined) return [];
+        return [{
+          content,
+          ...(readString(item.description) ? { description: readString(item.description) } : {}),
+          enabled: item.enabled !== false,
+          id,
+          ...(isObject(item.metadata) ? { metadata: item.metadata } : {}),
+          name,
+          ...(readString(item.source) ? { source: readString(item.source) } : {})
+        }];
+      })
+    : undefined;
+  return {
+    ...(mcpServers ? { mcpServers } : {}),
+    ...(skills ? { skills } : {})
+  };
+}
+
+function normalizeIntegrationsConfig(value: Partial<CcrIntegrationsConfig> | undefined): CcrIntegrationsConfig {
+  return {
+    mcpServers: Array.isArray(value?.mcpServers) ? value.mcpServers : DEFAULT_CONFIG.integrations.mcpServers,
+    skills: Array.isArray(value?.skills) ? value.skills : DEFAULT_CONFIG.integrations.skills
   };
 }
 

@@ -106,11 +106,10 @@ export async function compileCoreGatewayConfig(
   const localAgentAuthProviderHookPlugin = localAgentAuthProviderHookPluginConfig(providerPluginsWithCapabilityAliases);
   const pluginAgentConfig = isRecord(pluginCoreGatewayConfig.agent) ? pluginCoreGatewayConfig.agent : {};
   const pluginMcpServers = Array.isArray(pluginAgentConfig.mcpServers) ? pluginAgentConfig.mcpServers : [];
-  const externalMcpServers = [
-    ...pluginMcpServers,
-    ...(config.agent?.mcpServers ?? []),
-    ...(config.toolHub?.mcpServers ?? [])
-  ];
+  const centralizedMcpServers = config.integrations?.mcpServers?.length
+    ? config.integrations.mcpServers
+    : [...(config.agent?.mcpServers ?? []), ...(config.toolHub?.mcpServers ?? [])];
+  const externalMcpServers = [...pluginMcpServers, ...centralizedMcpServers];
   const toolHubServer = toolHubMcpServer(config, externalMcpServers);
   const mediaMcpServer = mediaToolsMcpServer(config);
   const mcpServers = [

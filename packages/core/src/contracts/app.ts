@@ -20,6 +20,15 @@ export type AppDataExportResult = {
   file?: string;
 };
 
+export type CcrConfigExport = {
+  config: AppConfig;
+  excludedData: string[];
+  exportedAt: string;
+  kind: "claude-code-router-config-export";
+  pathFormat: "portable-posix";
+  version: 2;
+};
+
 export type AppCaptureElementPngRequest = {
   borderRadius?: number;
   exportId?: string;
@@ -978,6 +987,21 @@ export type GatewayMcpRemoteServerConfig = GatewayMcpServerBaseConfig & {
 
 export type GatewayMcpServerConfig = GatewayMcpStdioServerConfig | GatewayMcpRemoteServerConfig;
 
+export type CcrSkillConfig = {
+  content: string;
+  description?: string;
+  enabled: boolean;
+  id: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  source?: string;
+};
+
+export type CcrIntegrationsConfig = {
+  mcpServers: GatewayMcpServerConfig[];
+  skills: CcrSkillConfig[];
+};
+
 export type GatewayAgentConfig = {
   mcpServers: GatewayMcpServerConfig[];
 };
@@ -1855,6 +1879,7 @@ export type AppConfig = {
   botConfigs: BotGatewaySavedConfig[];
   botGateway: BotGatewayRuntimeConfig;
   contextArchive: ContextArchiveConfig;
+  integrations: CcrIntegrationsConfig;
   gateway: GatewayRuntimeConfig;
   mediaTools: MediaToolsConfig;
   launchAtLogin: boolean;

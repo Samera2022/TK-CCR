@@ -13,3 +13,4 @@ export { RoutingView, DeleteRoutingRuleDialog, AddRoutingRuleDialog } from "./ro
 export { ExtensionsView, DeleteExtensionDialog, PluginSettingsDialog, ConfigureClaudeDesignDialog } from "./extensions";
 export { VirtualModelsView, VirtualModelDialog, InstallExtensionDialog } from "./virtual-models";
 export { OrderListView } from "./order-list";
+export { IntegrationsView } from "./integrations";

@@ -36,6 +36,12 @@ export function normalizeConfig(config: AppConfig): AppConfig {
     botConfigs: normalizeBotGatewaySavedConfigs(config.botConfigs),
     botGateway: normalizeBotGatewayRuntimeConfig(config.botGateway) ?? fallbackConfig.botGateway,
     contextArchive: normalizeContextArchiveConfig(config.contextArchive),
+    integrations: {
+      ...fallbackConfig.integrations,
+      ...(config.integrations || {}),
+      mcpServers: Array.isArray(config.integrations?.mcpServers) ? normalizeMcpServers(config.integrations.mcpServers) : fallbackConfig.integrations.mcpServers,
+      skills: Array.isArray(config.integrations?.skills) ? config.integrations.skills : fallbackConfig.integrations.skills
+    },
     gateway: {
       ...fallbackConfig.gateway,
       ...(config.gateway || {}),

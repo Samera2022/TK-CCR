@@ -102,6 +102,10 @@ export function createDefaultAppConfig(options: DefaultAppConfigOptions = {}): A
       storagePath: "",
       toolName: "ccr_history_ask"
     },
+    integrations: {
+      mcpServers: [],
+      skills: []
+    },
     gateway: {
       coreHost,
       corePort: 3457,

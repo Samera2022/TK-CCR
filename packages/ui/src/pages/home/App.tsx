@@ -3267,6 +3267,10 @@ function App() {
                   removeExtension: (source, index, groupIndexes) => setExtensionDeleteTarget({ groupIndexes: extensionActionIndexes(index, groupIndexes), index, source }),
                   setExtensionEnabled
                 },
+                integrations: {
+                  config: draftConfig,
+                  onChange: (integrations) => updateConfig((config) => ({ ...config, integrations }))
+                },
                 logs: {
                   enabled: requestLogsEnabled,
                   error: requestLogError,

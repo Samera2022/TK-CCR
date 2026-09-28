@@ -47,7 +47,7 @@ import {
 } from "./usage";
 import type { RouterConditionSource } from "./options";
 
-export type ViewId = "onboarding" | "overview" | "observability" | "api-keys" | "server" | "profile" | "networking" | "logs" | "providers" | "models" | "routing" | "virtual-models" | "extensions" | "provider-pool" | "order-list";
+export type ViewId = "onboarding" | "overview" | "observability" | "api-keys" | "server" | "profile" | "networking" | "logs" | "providers" | "models" | "routing" | "virtual-models" | "extensions" | "provider-pool" | "order-list" | "integrations";
 export type NavigationId = ViewId;
 export type OnboardingStepId = "provider" | "profile" | "enter";
 export type AppLanguagePreference = "system" | "en" | "zh";
