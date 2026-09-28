@@ -961,6 +961,7 @@ export type GatewayMcpServerTransport = "stdio" | "streamable-http" | "sse";
 export type GatewayMcpStdioMessageMode = "content-length" | "newline-json";
 
 export type GatewayMcpServerBaseConfig = {
+  enabled?: boolean;
   name: string;
   protocolVersion: string;
   requestTimeoutMs: number;

@@ -2540,6 +2540,7 @@ function parseMcpServers(value: unknown): GatewayMcpServerConfig[] | undefined {
         return {
           ...(readString(item.apiKey) ? { apiKey: readString(item.apiKey) } : {}),
           ...(readString(item.apiKeyEnv) ? { apiKeyEnv: readString(item.apiKeyEnv) } : {}),
+          enabled: item.enabled !== false,
           headers: parseStringRecord(item.headers) ?? {},
           name,
           protocolVersion,
@@ -2559,6 +2560,7 @@ function parseMcpServers(value: unknown): GatewayMcpServerConfig[] | undefined {
         args: parseStringList(item.args),
         command,
         ...(readString(item.cwd) ? { cwd: readString(item.cwd) } : {}),
+        enabled: item.enabled !== false,
         env: parseStringRecord(item.env) ?? {},
         name,
         protocolVersion,

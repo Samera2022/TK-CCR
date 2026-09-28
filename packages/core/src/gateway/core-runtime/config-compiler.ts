@@ -107,7 +107,7 @@ export async function compileCoreGatewayConfig(
   const pluginAgentConfig = isRecord(pluginCoreGatewayConfig.agent) ? pluginCoreGatewayConfig.agent : {};
   const pluginMcpServers = Array.isArray(pluginAgentConfig.mcpServers) ? pluginAgentConfig.mcpServers : [];
   const centralizedMcpServers = config.integrations?.mcpServers?.length
-    ? config.integrations.mcpServers
+    ? config.integrations.mcpServers.filter((server) => server.enabled !== false)
     : [...(config.agent?.mcpServers ?? []), ...(config.toolHub?.mcpServers ?? [])];
   const externalMcpServers = [...pluginMcpServers, ...centralizedMcpServers];
   const toolHubServer = toolHubMcpServer(config, externalMcpServers);
