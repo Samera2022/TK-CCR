@@ -20,7 +20,7 @@ test("sidebar navigation groups pages and hides networking from the sidebar", ()
     ["provider-pool", "order-list"],
     ["providers", "profile", "routing"],
     ["logs", "observability"],
-    ["virtual-models", "models", "api-keys", "extensions", "integrations"]
+    ["virtual-models", "models", "api-keys", "extensions", "integrations", "control-center"]
   ]);
   assert.equal(groups.some((group) => group.items.some((item) => item.id === "networking")), false);
 
@@ -30,7 +30,7 @@ test("sidebar navigation groups pages and hides networking from the sidebar", ()
     ["provider-pool", "order-list"],
     ["providers", "profile", "routing"],
     ["logs"],
-    ["virtual-models", "models", "api-keys", "extensions", "integrations"]
+    ["virtual-models", "models", "api-keys", "extensions", "integrations", "control-center"]
   ]);
 });
 

@@ -3271,6 +3271,10 @@ function App() {
                   config: draftConfig,
                   onChange: (integrations) => updateConfig((config) => ({ ...config, integrations }))
                 },
+                controlCenter: {
+                  config: draftConfig,
+                  onChange: (config) => updateConfig(() => config)
+                },
                 logs: {
                   enabled: requestLogsEnabled,
                   error: requestLogError,

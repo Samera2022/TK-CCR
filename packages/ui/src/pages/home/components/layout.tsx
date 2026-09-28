@@ -19,6 +19,7 @@ import { RoutingView } from "./routing";
 import { VirtualModelsView } from "./virtual-models";
 import { OrderListView } from "./order-list";
 import { IntegrationsView } from "./integrations";
+import { ControlCenterView } from "./control-center";
 
 export type MainNavigationItem = {
   icon: LucideIcon;
@@ -40,7 +41,7 @@ const sidebarNavigationGroupDefinitions: Array<{
   { id: "common", itemIds: ["provider-pool", "order-list"], label: "常用" },
   { id: "setup", itemIds: ["providers", "profile", "routing"], label: "Setup" },
   { id: "monitor", itemIds: ["logs", "observability"], label: "Monitor" },
-  { id: "advanced", itemIds: ["virtual-models", "models", "api-keys", "extensions", "integrations"], label: "Advanced" }
+  { id: "advanced", itemIds: ["virtual-models", "models", "api-keys", "extensions", "integrations", "control-center"], label: "Advanced" }
 ];
 
 export function groupSidebarNavigation(visibleNavigation: MainNavigationItem[]): SidebarNavigationGroup[] {
@@ -68,6 +69,7 @@ type MainViewProps = {
   providers: ComponentProps<typeof ProvidersView>;
   orderList: ComponentProps<typeof OrderListView>;
   integrations: ComponentProps<typeof IntegrationsView>;
+  controlCenter: ComponentProps<typeof ControlCenterView>;
   routing: ComponentProps<typeof RoutingView>;
   virtualModels: ComponentProps<typeof VirtualModelsView>;
 };
@@ -463,6 +465,7 @@ function MainViewSwitch({
         {activeView === "provider-pool" ? <ProvidersView {...viewProps.providers} /> : null}
         {activeView === "order-list" ? <OrderListView {...viewProps.orderList} /> : null}
         {activeView === "integrations" ? <IntegrationsView {...viewProps.integrations} /> : null}
+        {activeView === "control-center" ? <ControlCenterView {...viewProps.controlCenter} /> : null}
         {activeView === "models" ? <ModelsView {...viewProps.models} /> : null}
         {activeView === "routing" ? <RoutingView {...viewProps.routing} /> : null}
         {activeView === "virtual-models" ? <VirtualModelsView {...viewProps.virtualModels} /> : null}

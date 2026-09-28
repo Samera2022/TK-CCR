@@ -14,3 +14,4 @@ export { ExtensionsView, DeleteExtensionDialog, PluginSettingsDialog, ConfigureC
 export { VirtualModelsView, VirtualModelDialog, InstallExtensionDialog } from "./virtual-models";
 export { OrderListView } from "./order-list";
 export { IntegrationsView } from "./integrations";
+export { ControlCenterView } from "./control-center";
