@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync 
 import path from "node:path";
 import { deflateSync, inflateSync } from "node:zlib";
 import { loadOnboardingFinished, markOnboardingFinished } from "@ccr/core/config/onboarding-state";
+import { createPortableConfigExport } from "@ccr/core/config/config-export";
 import { builtInBrowserService } from "./built-in-browser";
 import { scanBotHandoffBluetoothTargets, scanBotHandoffWifiTargets } from "@ccr/core/agents/bot-gateway/handoff-scan-service";
 import { cancelBotGatewayQrLogin, startBotGatewayQrLogin, waitBotGatewayQrLogin } from "@ccr/core/agents/bot-gateway/qr-login-service";
@@ -460,19 +461,9 @@ async function exportAppData(window: BrowserWindow | null): Promise<AppDataExpor
   const config = await loadAppConfig();
   const onboardingFinished = await loadOnboardingFinished();
   const payload = {
-    app: {
-      name: APP_NAME,
-      platform: process.platform,
-      version: app.getVersion()
-    },
-    appState: {
-      onboardingFinished
-    },
-    config,
-    exportedAt,
-    files: readDataExportFiles(),
-    kind: "claude-code-router-data-export",
-    version: 1
+    ...createPortableConfigExport(config, exportedAt),
+    app: { name: APP_NAME, platform: process.platform, version: app.getVersion() },
+    appState: { onboardingFinished }
   };
 
   writeFileSync(result.filePath, `${JSON.stringify(payload, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
@@ -957,30 +948,6 @@ function createCrc32Table(): Uint32Array {
     table[index] = value >>> 0;
   }
   return table;
-}
-
-function readDataExportFiles(): Array<{ base64: string; name: string; path: string; sizeBytes: number }> {
-  const files: Array<{ base64: string; name: string; path: string; sizeBytes: number }> = [];
-  for (const file of dataExportCandidateFiles()) {
-    try {
-      if (!existsSync(file)) {
-        continue;
-      }
-      const stat = statSync(file);
-      if (!stat.isFile()) {
-        continue;
-      }
-      files.push({
-        base64: readFileSync(file).toString("base64"),
-        name: path.basename(file),
-        path: file,
-        sizeBytes: stat.size
-      });
-    } catch (error) {
-      console.warn(`[export] Failed to include ${file}: ${formatError(error)}`);
-    }
-  }
-  return files;
 }
 
 function dataExportCandidateFiles(): string[] {

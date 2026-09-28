@@ -1199,7 +1199,7 @@ function DataSettingsSection({
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-semibold text-foreground">{t("Export data")}</div>
             <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
-              {t("Export current configuration and SQLite data into a single JSON backup file. The export contains API keys and should be stored securely.")}
+              {t("Export all CCR configuration, providers, order lists, Skills and MCP settings into a portable JSON file. Conversation history, request logs and usage statistics are excluded; API keys remain included and must be stored securely.")}
             </div>
           </div>
           <Button disabled={exporting} onClick={exportData} size="sm" type="button">
