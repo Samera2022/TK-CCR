@@ -16,6 +16,7 @@ import { removeOpenCodeProviderAccountConfig } from "@ccr/core/agents/local-prov
 import { CLAUDE_CODE_DEFAULT_ENV, CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY_ENV, CLAUDE_DESIGN_PLUGIN_ID, CLAUDE_SHIP_PLUGIN_ID, DEFAULT_TRAY_COMPONENT_VARIANTS, GATEWAY_PLUGIN_PERMISSION_IDS, GATEWAY_PLUGIN_SURFACE_IDS, OVERVIEW_WIDGET_SIZE_VALUES, ROUTER_FALLBACK_MAX_RETRY_COUNT, ROUTER_SCRIPT_API_VERSION, ROUTER_SCRIPT_DEFAULT_TIMEOUT_MS, ROUTER_SCRIPT_MAX_TIMEOUT_MS, TRAY_SINGLETON_WIDGET_TYPES, TRAY_TOP_WIDGET_TYPES, TRAY_WINDOW_MODULE_IDS, enforceSingleEnabledGlobalProfilePerAgent, isEnabledGlobalProfile, knownGatewayPluginDefaultApps, knownGatewayPluginDefaultPermissions, knownGatewayPluginDefaultSurfaces } from "@ccr/core/contracts/app";
 import { createDefaultAppConfig } from "@ccr/core/config/default-config";
 import { maxRequestLogBodyBytes } from "@ccr/core/observability/request-log-limits";
+import { applyGeneralModelCapabilityDefaults } from "@ccr/core/models/capability-defaults";
 import { findProviderPresetByBaseUrl, primaryProviderPresetEndpoint, providerApiKeySafetyIssue, providerEndpointCanReceiveProviderApiKey } from "@ccr/core/providers/presets/index";
 import { isDesktopAppRuntime } from "@ccr/core/runtime/desktop-app";
 import type {
@@ -1425,7 +1426,10 @@ function parseProviders(value: unknown): GatewayProviderConfig[] | undefined {
         : [];
       const modelDescriptions = parseModelDescriptions(item.modelDescriptions ?? item.model_descriptions, models);
       const modelDisplayNames = parseModelDisplayNames(item.modelDisplayNames ?? item.model_display_names, models);
-      const modelMetadata = parseModelMetadata(item.modelMetadata ?? item.model_metadata, models);
+      const modelMetadata = applyGeneralModelCapabilityDefaults(
+        models,
+        parseModelMetadata(item.modelMetadata ?? item.model_metadata, models)
+      );
 
       if (!name) {
         return undefined;
@@ -1594,7 +1598,15 @@ function parseProviderModelCapabilities(value: unknown): ProviderModelCapabiliti
     return undefined;
   }
   const capabilities: ProviderModelCapabilities = {};
-  const fields: Array<keyof ProviderModelCapabilities> = ["imageInput", "webSearch"];
+  const fields: Array<keyof ProviderModelCapabilities> = [
+    "audioInput",
+    "imageInput",
+    "reasoning",
+    "structuredOutput",
+    "textInput",
+    "toolUse",
+    "webSearch"
+  ];
   for (const field of fields) {
     const snakeCaseField = field.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
     const candidate = value[field] ?? value[snakeCaseField];

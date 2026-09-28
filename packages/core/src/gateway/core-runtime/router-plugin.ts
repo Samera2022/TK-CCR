@@ -468,6 +468,10 @@ export async function createGatewayPlugin(input: GatewayPluginFactoryInput = {})
       transformResponse: (responseInput: GatewayResponseHookInput) =>
         applyCodexBridgeResponseTransform(responseInput)
     }, {
+      key: "ccr-error-rectifier",
+      transformResponse: (responseInput: GatewayResponseHookInput) =>
+        applyErrorRectifierTransform(responseInput)
+    }, {
       key: ccrOpenRouterDiscountFinalizeResponseHookKey,
       transformResponse: (responseInput: GatewayResponseHookInput) => {
         finalizeOpenRouterDiscountSelection(responseInput);
@@ -831,6 +835,30 @@ function applyCodexBridgeResponseTransform(
   }
 
   return changed ? { responsePayload: value } : undefined;
+}
+
+function applyErrorRectifierTransform(
+  responseInput: GatewayResponseHookInput
+): { responsePayload: unknown } | undefined {
+  if ((responseInput.statusCode ?? responseInput.upstreamResponse?.status ?? 200) < 400) {
+    return undefined;
+  }
+  let provider: string | undefined;
+  if (responseInput.upstreamRequest?.url) {
+    try {
+      provider = new URL(responseInput.upstreamRequest.url).hostname;
+    } catch {
+      provider = undefined;
+    }
+  }
+  const context = {
+    model: responseInput.model,
+    provider,
+    statusCode: responseInput.statusCode ?? responseInput.upstreamResponse?.status
+  };
+  const rectified = rectifyUpstreamError(responseInput.responsePayload, context);
+  const normalized = normalizeGatewayErrorPayload(rectified, context);
+  return { responsePayload: normalized };
 }
 
 function applyCodexBridgeStreamTransform(streamInput: GatewayStreamHookInput): Response | undefined {

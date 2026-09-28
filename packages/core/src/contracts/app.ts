@@ -196,7 +196,12 @@ export type ProviderReasoningLevel = {
 };
 
 export type ProviderModelCapabilities = {
+  audioInput?: boolean;
   imageInput?: boolean;
+  reasoning?: boolean;
+  structuredOutput?: boolean;
+  textInput?: boolean;
+  toolUse?: boolean;
   webSearch?: boolean;
 };
 

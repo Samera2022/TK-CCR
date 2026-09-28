@@ -4877,6 +4877,16 @@ function ModelMetadataEditor({
     });
   }
 
+  const capabilityOptions: Array<{ key: CapabilityKey; label: string }> = [
+    { key: "textInput", label: "Text input" },
+    { key: "imageInput", label: "Image" },
+    { key: "audioInput", label: "Audio input" },
+    { key: "toolUse", label: "Tool use" },
+    { key: "structuredOutput", label: "Structured output" },
+    { key: "reasoning", label: "Reasoning" },
+    { key: "webSearch", label: "Web search" }
+  ];
+
   return (
     <div className={cn("space-y-2", header && "rounded-md border border-border bg-muted/20 p-2", className)}>
       {header ? (
@@ -5053,37 +5063,27 @@ function ModelMetadataEditor({
                   </div>
                   <div className="space-y-2">
                     <div className="flex min-w-0 items-center justify-between gap-2">
-                      <Label className="flex min-w-0 items-center gap-2 text-[12px] font-medium">
-                        <Checkbox
-                          checked={modelMetadata?.capabilities?.webSearch ?? modelDefaults?.capabilities?.webSearch ?? false}
-                          onCheckedChange={(checked) => updateCapability(model, "webSearch", checked)}
-                        />
-                        <span>{t("Web search")}</span>
-                      </Label>
-                      {modelMetadata?.capabilities?.webSearch !== undefined ? (
-                        <Button className="h-6 px-2 text-[10px]" onClick={() => resetCapability(model, "webSearch")} type="button" variant="ghost">
-                          {t("Use preset")}
-                        </Button>
-                      ) : null}
+                      <Label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t("Capabilities")}</Label>
+                      <span className="text-[10px] text-muted-foreground/75">{t("Defaults can be overridden per provider")}</span>
                     </div>
-                    <div className="text-[10px] leading-4 text-muted-foreground/75">{t("Declare whether the model provides native web search.")}</div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex min-w-0 items-center justify-between gap-2">
-                      <Label className="flex min-w-0 items-center gap-2 text-[12px] font-medium">
-                        <Checkbox
-                          checked={modelMetadata?.capabilities?.imageInput ?? modelDefaults?.capabilities?.imageInput ?? false}
-                          onCheckedChange={(checked) => updateCapability(model, "imageInput", checked)}
-                        />
-                        <span>{t("Image")}</span>
-                      </Label>
-                      {modelMetadata?.capabilities?.imageInput !== undefined ? (
-                        <Button className="h-6 px-2 text-[10px]" onClick={() => resetCapability(model, "imageInput")} type="button" variant="ghost">
-                          {t("Use preset")}
-                        </Button>
-                      ) : null}
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {capabilityOptions.map(({ key, label }) => (
+                        <div className="flex min-w-0 items-center justify-between gap-2 rounded border border-border/70 px-2 py-1.5" key={key}>
+                          <Label className="flex min-w-0 items-center gap-2 text-[11px] font-normal">
+                            <Checkbox
+                              checked={modelMetadata?.capabilities?.[key] ?? modelDefaults?.capabilities?.[key] ?? false}
+                              onCheckedChange={(checked) => updateCapability(model, key, checked)}
+                            />
+                            <span>{t(label)}</span>
+                          </Label>
+                          {modelMetadata?.capabilities?.[key] !== undefined ? (
+                            <Button className="h-6 px-2 text-[10px]" onClick={() => resetCapability(model, key)} type="button" variant="ghost">
+                              {t("Use preset")}
+                            </Button>
+                          ) : null}
+                        </div>
+                      ))}
                     </div>
-                    <div className="text-[10px] leading-4 text-muted-foreground/75">{t("Declare whether the model accepts image input.")}</div>
                   </div>
                 </div>
               ) : null}
