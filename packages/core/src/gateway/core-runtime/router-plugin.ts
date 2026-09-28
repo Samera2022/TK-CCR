@@ -8,6 +8,8 @@ import {
   resolveApiKeyFromHeaders
 } from "@ccr/core/gateway/auth/api-key-authorizer";
 import { ccrRemoteControlPathPrefix, ccrRemoteControlService } from "@ccr/core/gateway/remote-control-service";
+import { historyPathPrefix, historyService } from "@ccr/core/gateway/history/service";
+import { normalizeGatewayErrorPayload, rectifyUpstreamError } from "@ccr/core/gateway/rectifier/error-rectifier";
 import {
   ClaudeCodeRouterPlugin,
   type ClaudeCodeRouteDecision
@@ -278,6 +280,8 @@ export async function createGatewayPlugin(input: GatewayPluginFactoryInput = {})
           "GET /api/claude_cli/bootstrap",
           "POST /v1/messages",
           "POST /v1/messages/count_tokens",
+          "GET /__ccr/history/v1/threads?project_directory=...",
+          "POST /__ccr/history/v1/threads/{threadId}/messages",
           "GET /models",
           "GET /v1/models"
         ],
@@ -301,6 +305,22 @@ export async function createGatewayPlugin(input: GatewayPluginFactoryInput = {})
       priority: "pre",
       handler: async ({ request, reply }: { request: GatewayPluginHttpRequest; reply: GatewayPluginHttpReply }) =>
         handleRemoteControlRoute(config, request, reply, coreAuthToken, publicAuthKeys)
+    }, {
+      auth: "none",
+      key: "ccr-public-history-root",
+      method: "ALL",
+      path: historyPathPrefix,
+      priority: "pre",
+      handler: async ({ request, reply }: { request: GatewayPluginHttpRequest; reply: GatewayPluginHttpReply }) =>
+        handleHistoryRoute(config, request, reply, coreAuthToken, publicAuthKeys)
+    }, {
+      auth: "none",
+      key: "ccr-public-history",
+      method: "ALL",
+      path: `${historyPathPrefix}/*`,
+      priority: "pre",
+      handler: async ({ request, reply }: { request: GatewayPluginHttpRequest; reply: GatewayPluginHttpReply }) =>
+        handleHistoryRoute(config, request, reply, coreAuthToken, publicAuthKeys)
     }, {
       auth: "none",
       key: "ccr-public-wif-token",
@@ -677,6 +697,31 @@ async function handleRemoteControlRoute(
     sendJson: sendRawJson
   });
   return reply;
+}
+
+async function handleHistoryRoute(
+  config: AppConfig,
+  request: GatewayPluginHttpRequest,
+  reply: GatewayPluginHttpReply,
+  coreAuthToken: string | undefined,
+  publicAuthKeys: readonly string[]
+): Promise<unknown> {
+  const authorization = await resolvePublicGatewayAuth(config, request.headers, {
+    coreAuthToken,
+    publicAuthKeys,
+    rejectMissing: true,
+    url: request.url
+  });
+  if (!authorization.ok) {
+    return reply.code(authorization.status).send({ error: { message: authorization.error } });
+  }
+  const result = historyService.handleRequest({
+    body: request.body,
+    headers: request.headers,
+    method: request.method,
+    url: request.url
+  });
+  return reply.code(result.status).send(result.body);
 }
 
 function applyCodexBridgeRequestTransform(
