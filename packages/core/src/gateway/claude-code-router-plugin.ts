@@ -18,6 +18,7 @@ import { normalizeRouteScriptResult } from "@ccr/core/routing/route-script-resul
 import type { RouteScriptRuntime } from "@ccr/core/routing/route-script-runtime";
 import { profileApiKeyId } from "@ccr/core/profiles/api-key";
 import { isModelAllowedForProfile } from "@ccr/core/profiles/model-allowlist";
+import { orderListFallbackForClient } from "@ccr/core/routing/order-list";
 
 export { normalizeRouteSelector } from "@ccr/core/routing/model-registry";
 
@@ -301,7 +302,8 @@ async function resolveConfiguredRouteDecision(
   const authenticatedProfile = resolveAuthenticatedAnyProfile(request, config);
   const auth = routeAuthContext(request, authenticatedProfile);
   const profileRouting = authenticatedProfile ? compiled.profileRoutings.find((entry) => entry.profile.id === authenticatedProfile.id && entry.active) : undefined;
-  const defaultFallback = compiled.fallback;
+  const configuredFallback = orderListFallbackForClient(config, authenticatedProfile);
+  const defaultFallback = configuredFallback === config.Router.fallback ? compiled.fallback : configuredFallback;
   const resolvedExplicitModel = compiled.modelRegistry.resolve(explicitModel) ?? compiled.modelRegistry.resolve(
     explicitModel
       ? resolveClaudeAppGatewayRouteModel(explicitModel, config, claudeAppGatewayModelRouteOptions)

@@ -16,7 +16,8 @@ import type {
   RouterRuleOperator,
   RouterRuleRewrite,
   RouterRuleRewriteOperation,
-  RouterRuleType
+  RouterRuleType,
+  ProviderModelPoolEntry
 } from "@ccr/core/contracts/app";
 import {
   fallbackConfig
@@ -49,8 +50,25 @@ export function normalizeRouterConfig(value: Partial<RouterConfig> | undefined):
     ...routerWithoutLegacyDefault,
     builtInRules: normalizeRouterBuiltInRules((value as Record<string, unknown> | undefined)?.builtInRules),
     fallback: normalizeRouterFallbackConfig((value as Record<string, unknown> | undefined)?.fallback),
+    orderLists: normalizeRouterOrderLists((value as Record<string, unknown> | undefined)?.orderLists),
     rules
   };
+}
+
+export function normalizeRouterOrderLists(value: unknown): Record<string, ProviderModelPoolEntry[]> {
+  if (!isPlainRecord(value)) return {};
+  const output: Record<string, ProviderModelPoolEntry[]> = {};
+  for (const [client, entries] of Object.entries(value)) {
+    if (!Array.isArray(entries)) continue;
+    output[client] = entries.flatMap((entry, index) => {
+      if (!isPlainRecord(entry)) return [];
+      const provider = stringValue(entry.provider);
+      const model = stringValue(entry.model);
+      if (!provider || !model) return [];
+      return [{ id: stringValue(entry.id) ?? `${client}-${index + 1}`, model, provider }];
+    });
+  }
+  return output;
 }
 
 export function normalizeRouterBuiltInRules(value: unknown): RouterBuiltInRulesConfig {

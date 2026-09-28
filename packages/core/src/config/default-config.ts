@@ -46,6 +46,7 @@ export function createDefaultAppConfig(options: DefaultAppConfigOptions = {}): A
         models: [],
         retryCount: 1
       },
+      orderLists: {},
       rules: []
     },
     agent: {

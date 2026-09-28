@@ -3344,6 +3344,10 @@ function App() {
                   removeProvider: setProviderDeleteIndex,
                   setProviderEnabled
                 },
+                orderList: {
+                  config: draftConfig,
+                  onChange: (config) => updateConfig(() => config)
+                },
                 routing: {
                   addRule: openAddRoutingRuleDialog,
                   config: draftConfig,

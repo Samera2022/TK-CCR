@@ -1859,7 +1859,25 @@ function parseRouter(value: unknown): Partial<RouterConfig> | undefined {
   if (fallback) {
     router.fallback = fallback;
   }
+  if (isObject(value.orderLists)) {
+    router.orderLists = parseRouterOrderLists(value.orderLists);
+  }
   return router;
+}
+
+function parseRouterOrderLists(value: Record<string, unknown>): RouterConfig["orderLists"] {
+  const output: RouterConfig["orderLists"] = {};
+  for (const [client, entries] of Object.entries(value)) {
+    if (!Array.isArray(entries)) continue;
+    output[client] = entries.flatMap((entry, index) => {
+      if (!isObject(entry)) return [];
+      const provider = readString(entry.provider);
+      const model = readString(entry.model);
+      if (!provider || !model) return [];
+      return [{ id: readString(entry.id) ?? `${client}-${index + 1}`, model, provider }];
+    });
+  }
+  return output;
 }
 
 function parseRouterBuiltInRules(value: unknown): RouterBuiltInRulesConfig | undefined {

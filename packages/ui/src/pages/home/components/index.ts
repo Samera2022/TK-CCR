@@ -12,3 +12,4 @@ export { ProvidersView, ModelsView, DeleteProviderDialog, ProviderDeepLinkDialog
 export { RoutingView, DeleteRoutingRuleDialog, AddRoutingRuleDialog } from "./routing";
 export { ExtensionsView, DeleteExtensionDialog, PluginSettingsDialog, ConfigureClaudeDesignDialog } from "./extensions";
 export { VirtualModelsView, VirtualModelDialog, InstallExtensionDialog } from "./virtual-models";
+export { OrderListView } from "./order-list";

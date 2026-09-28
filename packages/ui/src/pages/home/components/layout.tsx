@@ -17,6 +17,7 @@ import { ProfileView } from "./profiles";
 import { ModelsView, ProvidersView } from "./providers";
 import { RoutingView } from "./routing";
 import { VirtualModelsView } from "./virtual-models";
+import { OrderListView } from "./order-list";
 
 export type MainNavigationItem = {
   icon: LucideIcon;
@@ -24,7 +25,7 @@ export type MainNavigationItem = {
 };
 
 export type SidebarNavigationGroup = {
-  id: "advanced" | "monitor" | "setup" | "workspace";
+  id: "advanced" | "common" | "monitor" | "setup" | "workspace";
   items: MainNavigationItem[];
   label: string;
 };
@@ -35,6 +36,7 @@ const sidebarNavigationGroupDefinitions: Array<{
   label: string;
 }> = [
   { id: "workspace", itemIds: ["overview"], label: "Workspace" },
+  { id: "common", itemIds: ["provider-pool", "order-list"], label: "常用" },
   { id: "setup", itemIds: ["providers", "profile", "routing"], label: "Setup" },
   { id: "monitor", itemIds: ["logs", "observability"], label: "Monitor" },
   { id: "advanced", itemIds: ["virtual-models", "models", "api-keys", "extensions"], label: "Advanced" }
@@ -63,6 +65,7 @@ type MainViewProps = {
   overview: ComponentProps<typeof OverviewView>;
   profile: ComponentProps<typeof ProfileView>;
   providers: ComponentProps<typeof ProvidersView>;
+  orderList: ComponentProps<typeof OrderListView>;
   routing: ComponentProps<typeof RoutingView>;
   virtualModels: ComponentProps<typeof VirtualModelsView>;
 };
@@ -455,6 +458,8 @@ function MainViewSwitch({
         {activeView === "networking" && networkCaptureEnabled ? <NetworkingView {...viewProps.networking} /> : null}
         {activeView === "logs" ? <LogsView {...viewProps.logs} /> : null}
         {activeView === "providers" ? <ProvidersView {...viewProps.providers} /> : null}
+        {activeView === "provider-pool" ? <ProvidersView {...viewProps.providers} /> : null}
+        {activeView === "order-list" ? <OrderListView {...viewProps.orderList} /> : null}
         {activeView === "models" ? <ModelsView {...viewProps.models} /> : null}
         {activeView === "routing" ? <RoutingView {...viewProps.routing} /> : null}
         {activeView === "virtual-models" ? <VirtualModelsView {...viewProps.virtualModels} /> : null}

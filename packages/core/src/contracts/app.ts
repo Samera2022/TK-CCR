@@ -745,6 +745,12 @@ export type RouterFallbackConfig = {
   retryCount: number;
 };
 
+export type ProviderModelPoolEntry = {
+  id?: string;
+  model: string;
+  provider: string;
+};
+
 export type RouterBuiltInAgentRuleId = "claude-code" | "codex";
 
 export type RouterBuiltInAgentRuleConfig = {
@@ -756,6 +762,7 @@ export type RouterBuiltInRulesConfig = Record<RouterBuiltInAgentRuleId, RouterBu
 export type RouterConfig = {
   builtInRules: RouterBuiltInRulesConfig;
   fallback: RouterFallbackConfig;
+  orderLists: Record<string, ProviderModelPoolEntry[]>;
   rules: RouterRule[];
 };
 
