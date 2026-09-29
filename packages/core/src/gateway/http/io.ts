@@ -2,6 +2,7 @@
  * Extracted from gateway/service.ts. Keep this module focused on its named gateway boundary.
  */
 import type { IncomingHttpHeaders, IncomingMessage, Server, ServerResponse } from "node:http";
+import { brotliDecompressSync, gunzipSync, inflateSync, zstdDecompressSync } from "node:zlib";
 import type { ApiKeyConfig } from "@ccr/core/contracts/app";
 import { ccrRemoteControlPathPrefix } from "@ccr/core/gateway/remote-control-service";
 import { coreGatewayAuthHeader, localObservabilityHeaderNames, proxyHeaderDenyList, responseHeaderDenyList, sdkCompatibleTokenHeaderNames } from "@ccr/core/gateway/internal/shared";
@@ -313,9 +314,46 @@ export function readRequestBody(request: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     request.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-    request.on("end", () => resolve(Buffer.concat(chunks)));
+    request.on("end", () => {
+      try {
+        resolve(decompressRequestBody(Buffer.concat(chunks), readHeader(request.headers["content-encoding"])));
+      } catch (error) {
+        reject(error);
+      }
+    });
     request.on("error", reject);
   });
+}
+
+export function stripRequestBodyEncodingHeader(headers: Record<string, string>): void {
+  delete headers["content-encoding"];
+}
+
+function decompressRequestBody(body: Buffer, contentEncoding: string | undefined): Buffer {
+  if (!contentEncoding || contentEncoding.toLowerCase() === "identity") {
+    return body;
+  }
+
+  return contentEncoding
+    .toLowerCase()
+    .split(",")
+    .map((encoding) => encoding.trim())
+    .filter((encoding) => encoding && encoding !== "identity")
+    .reverse()
+    .reduce((decoded, encoding) => {
+      switch (encoding) {
+        case "br":
+          return brotliDecompressSync(decoded);
+        case "deflate":
+          return inflateSync(decoded);
+        case "gzip":
+          return gunzipSync(decoded);
+        case "zstd":
+          return zstdDecompressSync(decoded, { maxOutputLength: 96 * 1024 * 1024 });
+        default:
+          throw new Error(`Unsupported request content-encoding: ${encoding}`);
+      }
+    }, body);
 }
 
 

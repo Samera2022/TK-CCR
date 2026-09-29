@@ -9,6 +9,7 @@ import {
 } from "@ccr/core/gateway/auth/api-key-authorizer";
 import { ccrRemoteControlPathPrefix, ccrRemoteControlService } from "@ccr/core/gateway/remote-control-service";
 import { historyPathPrefix, historyService } from "@ccr/core/gateway/history/service";
+import { continuityPathPrefix, ContinuityService } from "@ccr/core/gateway/continuity";
 import { normalizeGatewayErrorPayload, rectifyUpstreamError } from "@ccr/core/gateway/rectifier/error-rectifier";
 import {
   ClaudeCodeRouterPlugin,
@@ -322,6 +323,22 @@ export async function createGatewayPlugin(input: GatewayPluginFactoryInput = {})
       priority: "pre",
       handler: async ({ request, reply }: { request: GatewayPluginHttpRequest; reply: GatewayPluginHttpReply }) =>
         handleHistoryRoute(config, request, reply, coreAuthToken, publicAuthKeys)
+    }, {
+      auth: "none",
+      key: "ccr-public-continuity-root",
+      method: "ALL",
+      path: continuityPathPrefix,
+      priority: "pre",
+      handler: async ({ request, reply }: { request: GatewayPluginHttpRequest; reply: GatewayPluginHttpReply }) =>
+        handleContinuityRoute(config, request, reply, coreAuthToken, publicAuthKeys)
+    }, {
+      auth: "none",
+      key: "ccr-public-continuity",
+      method: "ALL",
+      path: `${continuityPathPrefix}/*`,
+      priority: "pre",
+      handler: async ({ request, reply }: { request: GatewayPluginHttpRequest; reply: GatewayPluginHttpReply }) =>
+        handleContinuityRoute(config, request, reply, coreAuthToken, publicAuthKeys)
     }, {
       auth: "none",
       key: "ccr-public-integrations-root",
@@ -737,6 +754,34 @@ async function handleHistoryRoute(
   return reply.code(result.status).send(result.body);
 }
 
+
+// Continuity service singleton
+const continuityService = new ContinuityService();
+
+async function handleContinuityRoute(
+  config: AppConfig,
+  request: GatewayPluginHttpRequest,
+  reply: GatewayPluginHttpReply,
+  coreAuthToken: string | undefined,
+  publicAuthKeys: readonly string[]
+): Promise<unknown> {
+  const authorization = await resolvePublicGatewayAuth(config, request.headers, {
+    coreAuthToken,
+    publicAuthKeys,
+    rejectMissing: true,
+    url: request.url
+  });
+  if (!authorization.ok) {
+    return reply.code(authorization.status).send({ error: { message: authorization.error } });
+  }
+  const result = continuityService.handleRequest({
+    body: request.body,
+    headers: request.headers,
+    method: request.method,
+    url: request.url
+  });
+  return reply.code(result.status).send(result.body);
+}
 async function handleIntegrationsRoute(
   config: AppConfig,
   request: GatewayPluginHttpRequest,

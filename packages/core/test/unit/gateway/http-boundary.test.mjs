@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Readable } from "node:stream";
+import { gzipSync, zstdCompressSync } from "node:zlib";
 import {
   abortSignalMessage,
   filteredResponseHeaders,
@@ -9,10 +11,12 @@ import {
   parseJsonObject,
   readAuthToken,
   readHeader,
+  readRequestBody,
   readRemoteControlQueryAuthToken,
   shouldCaptureGatewayUsage,
   shouldSendBody,
   stripLocalGatewayAuthHeaders,
+  stripRequestBodyEncodingHeader,
   withCoreGatewayAuthHeader
 } from "@ccr/core/gateway/http/io.ts";
 import {
@@ -93,6 +97,22 @@ test("gateway header forwarding strips hop-by-hop, local auth, and observability
     }),
     { "x-keep": "yes" }
   );
+});
+
+test("gateway request bodies decompress zstd and gzip before JSON parsing", async () => {
+  const json = Buffer.from('{"model":"compressed"}');
+  for (const [encoding, body] of [
+    ["gzip", gzipSync(json)],
+    ["zstd", zstdCompressSync(json)]
+  ]) {
+    const request = Readable.from([body]);
+    request.headers = { "content-encoding": encoding };
+    assert.deepEqual(JSON.parse((await readRequestBody(request)).toString("utf8")), { model: "compressed" });
+  }
+
+  const headers = { "content-encoding": "zstd", "content-length": "42", "content-type": "application/json" };
+  stripRequestBodyEncodingHeader(headers);
+  assert.deepEqual(headers, { "content-length": "42", "content-type": "application/json" });
 });
 
 test("core gateway auth and upstream response headers stay on their intended boundary", () => {
