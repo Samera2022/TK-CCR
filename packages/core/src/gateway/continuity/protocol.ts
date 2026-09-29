@@ -69,6 +69,14 @@ export type DriftStatus =
   | { type: "different_branch"; oldBranch: string; newBranch: string }
   | { type: "git_unavailable" };
 
+export type DriftConfidence = "high" | "medium" | "low" | "unknown";
+
+export type DriftAssessment = {
+  drift: DriftStatus;
+  confidence: DriftConfidence;
+  score: number;
+};
+
 export type CreateCheckpointRequest = {
   id?: string;
   projectDirectory: string;
@@ -104,6 +112,13 @@ export type ListCheckpointsRequest = {
 
 export type ListCheckpointsResponse = {
   checkpoints: ProjectCheckpoint[];
+};
+
+export type RefreshCheckpointRequest = Omit<CreateCheckpointRequest, "gitBranch" | "gitHeadSha" | "gitDirty">;
+
+export type DriftAssessmentResponse = {
+  checkpoint: ProjectCheckpoint;
+  assessment: DriftAssessment;
 };
 
 export type ErrorResponse = {

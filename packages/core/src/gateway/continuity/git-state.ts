@@ -1,7 +1,7 @@
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { DriftStatus, GitState, ProjectCheckpoint } from "./protocol";
+import type { DriftAssessment, DriftConfidence, DriftStatus, GitState, ProjectCheckpoint } from "./protocol";
 
 /**
  * Capture current Git state of a project directory
@@ -79,4 +79,20 @@ export function checkDrift(
 
   // Clean
   return { type: "clean" };
+}
+
+export function assessDrift(
+  checkpoint: Pick<ProjectCheckpoint, "gitBranch" | "gitHeadSha" | "gitDirty">,
+  current: GitState
+): DriftAssessment {
+  const drift = checkDrift(checkpoint, current);
+  const confidence: DriftConfidence = drift.type === "clean"
+    ? "high"
+    : drift.type === "dirty_files"
+      ? "medium"
+      : drift.type === "git_unavailable"
+        ? "unknown"
+        : "low";
+  const score = confidence === "high" ? 1 : confidence === "medium" ? 0.7 : confidence === "low" ? 0.2 : 0;
+  return { drift, confidence, score };
 }

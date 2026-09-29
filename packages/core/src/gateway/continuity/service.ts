@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import path from "node:path";
 import { ContinuityStore } from "./store";
-import { captureGitState } from "./git-state";
+import { assessDrift, captureGitState } from "./git-state";
 import type {
   CreateCheckpointRequest,
   CreateCheckpointResponse,
@@ -51,11 +51,18 @@ export class ContinuityService {
           endpoints: [
             "/checkpoints",
             "/checkpoints/latest",
+            "/checkpoints/refresh",
+            "/checkpoints/:id/drift",
             "/git-state"
           ]
         },
         status: 200
       };
+    }
+
+    // POST /__ccr/continuity/v1/checkpoints/refresh
+    if (segments[0] === "checkpoints" && segments[1] === "refresh" && segments.length === 2 && method === "POST") {
+      return this.handleRefreshCheckpoint(body as CreateCheckpointRequest);
     }
 
     // POST /__ccr/continuity/v1/checkpoints
@@ -119,6 +126,18 @@ export class ContinuityService {
       return { body: { checkpoint }, status: 200 };
     }
 
+    // GET /__ccr/continuity/v1/checkpoints/:id/drift?projectDirectory=...
+    if (segments[0] === "checkpoints" && segments[2] === "drift" && segments.length === 3 && method === "GET") {
+      const checkpoint = this.store.getCheckpoint(segments[1]);
+      const projectDirectory = stringValue(url.searchParams.get("projectDirectory"));
+      if (!checkpoint) return error(404, "Checkpoint not found.");
+      if (!projectDirectory) return error(400, "projectDirectory is required.");
+      return {
+        body: { checkpoint, assessment: assessDrift(checkpoint, captureGitState(projectDirectory)) },
+        status: 200
+      };
+    }
+
     return error(404, "Continuity endpoint not found.");
   }
 
@@ -148,6 +167,20 @@ export class ContinuityService {
 
     const response: CreateCheckpointResponse = { checkpoint };
     return { body: response, status: 201 };
+  }
+
+  private handleRefreshCheckpoint(
+    request: CreateCheckpointRequest
+  ): { body: CreateCheckpointResponse | ErrorResponse; status: number } {
+    const projectDirectory = stringValue(request.projectDirectory);
+    if (!projectDirectory) return error(400, "projectDirectory is required.");
+    const gitState = captureGitState(projectDirectory);
+    return this.handleCreateCheckpoint({
+      ...request,
+      gitBranch: gitState.branch ?? undefined,
+      gitHeadSha: gitState.headSha ?? undefined,
+      gitDirty: gitState.dirty
+    });
   }
 }
 

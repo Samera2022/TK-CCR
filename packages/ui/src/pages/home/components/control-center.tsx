@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, Check, ChevronRight, CircleDot, Download, FileJson, FolderOpen, History, Layers3, RefreshCw, Search, ShieldCheck, Sparkles, Wrench, X } from "lucide-react";
+import { Activity, AlertTriangle, Check, ChevronRight, CircleDot, Download, FileJson, FolderOpen, GitBranch, History, Layers3, RefreshCw, Search, ShieldCheck, Sparkles, Wrench, X } from "lucide-react";
 import type { AppConfig, ProviderModelCapabilities, ProviderModelMetadata } from "@ccr/core/contracts/app";
 import { generalModelCapabilities } from "@ccr/core/models/capability-defaults";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { IntegrationsView } from "./integrations";
 
-export type ControlCenterTab = "history" | "rectifier" | "capabilities" | "integrations" | "export";
+export type ControlCenterTab = "history" | "continuity" | "rectifier" | "capabilities" | "integrations" | "export";
 
 type HistoryThread = {
   client?: string;
@@ -26,6 +26,27 @@ type HistoryMessage = {
   createdAt: number;
   id: string;
   role: string;
+};
+
+type ContinuityCheckpoint = {
+  id: string;
+  projectDirectory: string;
+  client: string;
+  gitBranch: string | null;
+  gitHeadSha: string | null;
+  gitDirty: boolean;
+  objective: string | null;
+  completed: string[];
+  blockers: string[];
+  nextSteps: string[];
+  verificationStatus: "passed" | "pending" | "failed" | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+type DriftAssessment = {
+  confidence: "high" | "medium" | "low" | "unknown";
+  score: number;
 };
 
 const capabilityLabels: Array<{ key: keyof ProviderModelCapabilities; label: string; short: string }> = [
@@ -46,6 +67,7 @@ export function ControlCenterView({ config, initialTab = "history", onChange }: 
   const [tab, setTab] = useState<ControlCenterTab>(initialTab);
   const tabItems = [
     { id: "history" as const, label: "统一历史", icon: History, detail: "Codex · DeepSeek Harness" },
+    { id: "continuity" as const, label: "项目连续性", icon: Activity, detail: "checkpoint · Git drift" },
     { id: "rectifier" as const, label: "错误整流", icon: ShieldCheck, detail: "响应兼容层" },
     { id: "capabilities" as const, label: "模型能力", icon: Sparkles, detail: `${config.Providers.length} 个 Provider` },
     { id: "integrations" as const, label: "Skills / MCP", icon: Wrench, detail: `${config.integrations.skills.length} Skills · ${config.integrations.mcpServers.length} MCP` },
@@ -83,6 +105,7 @@ export function ControlCenterView({ config, initialTab = "history", onChange }: 
 
         <main className="min-w-0">
           {tab === "history" ? <HistoryPanel config={config} /> : null}
+          {tab === "continuity" ? <ContinuityPanel config={config} /> : null}
           {tab === "rectifier" ? <RectifierPanel /> : null}
           {tab === "capabilities" ? <CapabilitiesPanel config={config} onChange={onChange} /> : null}
           {tab === "integrations" ? <IntegrationsView config={config} onChange={(integrations) => onChange({ ...config, integrations })} /> : null}
@@ -91,6 +114,84 @@ export function ControlCenterView({ config, initialTab = "history", onChange }: 
       </div>
     </div>
   );
+}
+
+function ContinuityPanel({ config }: { config: AppConfig }) {
+  const [projectDirectory, setProjectDirectory] = useState("");
+  const [checkpoint, setCheckpoint] = useState<ContinuityCheckpoint>();
+  const [history, setHistory] = useState<ContinuityCheckpoint[]>([]);
+  const [assessment, setAssessment] = useState<DriftAssessment>();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  function headers(): HeadersInit | undefined {
+    return config.APIKEY ? { Authorization: `Bearer ${config.APIKEY}` } : undefined;
+  }
+
+  async function loadContinuity() {
+    const directory = projectDirectory.trim();
+    if (!directory) return;
+    setLoading(true); setError("");
+    try {
+      const latestUrl = new URL("/__ccr/continuity/v1/checkpoints/latest", config.routerEndpoint);
+      latestUrl.searchParams.set("projectDirectory", directory);
+      const listUrl = new URL("/__ccr/continuity/v1/checkpoints", config.routerEndpoint);
+      listUrl.searchParams.set("projectDirectory", directory);
+      listUrl.searchParams.set("limit", "20");
+      const [latestResponse, listResponse] = await Promise.all([fetch(latestUrl, { headers: headers() }), fetch(listUrl, { headers: headers() })]);
+      if (!latestResponse.ok || !listResponse.ok) throw new Error(`连续性服务返回 HTTP ${latestResponse.status || listResponse.status}`);
+      const latestPayload = await latestResponse.json() as { checkpoint?: ContinuityCheckpoint | null };
+      const listPayload = await listResponse.json() as { checkpoints?: ContinuityCheckpoint[] };
+      const latest = latestPayload.checkpoint ?? undefined;
+      setCheckpoint(latest); setHistory(listPayload.checkpoints ?? []);
+      if (latest) {
+        const driftUrl = new URL(`/__ccr/continuity/v1/checkpoints/${encodeURIComponent(latest.id)}/drift`, config.routerEndpoint);
+        driftUrl.searchParams.set("projectDirectory", directory);
+        const driftResponse = await fetch(driftUrl, { headers: headers() });
+        if (driftResponse.ok) setAssessment((await driftResponse.json() as { assessment?: DriftAssessment }).assessment);
+      } else {
+        setAssessment(undefined);
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "无法读取项目连续性。");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function refreshCheckpoint() {
+    const directory = projectDirectory.trim();
+    if (!directory) return;
+    setLoading(true); setError("");
+    try {
+      const response = await fetch(new URL("/__ccr/continuity/v1/checkpoints/refresh", config.routerEndpoint), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(config.APIKEY ? { Authorization: `Bearer ${config.APIKEY}` } : {}) },
+        body: JSON.stringify({ projectDirectory: directory, client: "ccr-dashboard" }),
+      });
+      if (!response.ok) throw new Error(`刷新失败：HTTP ${response.status}`);
+      await loadContinuity();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "无法刷新项目连续性。");
+      setLoading(false);
+    }
+  }
+
+  const confidenceLabel = assessment?.confidence === "high" ? "可信" : assessment?.confidence === "medium" ? "工作区有变更" : assessment?.confidence === "low" ? "Git 已漂移" : "不可判断";
+  return <div className="grid gap-4">
+    <SectionIntro icon={Activity} title="项目连续性" description="查看 Codex 与 DeepSeek Harness 共享的最新 checkpoint，确认 Git 漂移后再继续工作。" badge="跨客户端恢复" />
+    <Card><CardContent className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+      <div className="relative"><FolderOpen className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input className="pl-9" onChange={(event) => setProjectDirectory(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void loadContinuity(); }} placeholder="输入项目目录，例如 /home/me/project" value={projectDirectory} /></div>
+      <Button disabled={loading || !projectDirectory.trim()} onClick={() => void loadContinuity()} variant="outline"><RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />读取状态</Button>
+      <Button disabled={loading || !projectDirectory.trim()} onClick={() => void refreshCheckpoint()}><Activity className="h-4 w-4" />手动刷新</Button>
+    </CardContent></Card>
+    {error ? <InlineError>{error}</InlineError> : null}
+    {checkpoint ? <Card><CardHeader><CardTitle className="flex flex-wrap items-center justify-between gap-2"><span>最新 checkpoint</span><Badge variant={assessment?.confidence === "low" ? "danger" : "secondary"}>{confidenceLabel}</Badge></CardTitle></CardHeader><CardContent className="grid gap-4 p-4">
+      <div className="grid gap-3 sm:grid-cols-3"><MetricCard label="客户端" value={checkpoint.client} detail={new Date(checkpoint.updatedAt).toLocaleString()} /><MetricCard label="Git 分支" value={checkpoint.gitBranch ?? "无 Git"} detail={checkpoint.gitHeadSha?.slice(0, 12) ?? "未记录"} /><MetricCard label="恢复置信度" value={assessment ? `${Math.round(assessment.score * 100)}%` : "—"} detail={confidenceLabel} tone={assessment?.confidence === "high" ? "success" : undefined} /></div>
+      <div className="grid gap-3 md:grid-cols-2"><div className="rounded-lg border border-border bg-muted/20 p-3"><div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"><GitBranch className="h-3.5 w-3.5" />当前目标</div><p className="text-[13px] leading-5">{checkpoint.objective ?? "未记录目标。"}</p></div><div className="rounded-lg border border-border bg-muted/20 p-3"><div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">下一步</div>{checkpoint.nextSteps.length ? <ul className="grid gap-1 text-[12px] leading-5">{checkpoint.nextSteps.map((step) => <li key={step}>• {step}</li>)}</ul> : <p className="text-[12px] text-muted-foreground">未记录下一步。</p>}</div></div>
+    </CardContent></Card> : <Card><CardContent className="p-10"><EmptyState icon={Activity} title="还没有 checkpoint" detail="输入项目目录并读取，或手动刷新创建第一条状态。" /></CardContent></Card>}
+    {history.length ? <Card><CardHeader><CardTitle>Checkpoint 历史</CardTitle></CardHeader><CardContent className="grid gap-2 p-4">{history.map((item) => <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 px-3 py-2.5 text-[12px]" key={item.id}><div className="min-w-0"><div className="font-medium">{item.objective ?? "未命名 checkpoint"}</div><div className="mt-0.5 text-[10px] text-muted-foreground">{item.client} · {item.gitBranch ?? "无分支"}</div></div><span className="text-[10px] text-muted-foreground">{new Date(item.updatedAt).toLocaleString()}</span></div>)}</CardContent></Card> : null}
+  </div>;
 }
 
 function HistoryPanel({ config }: { config: AppConfig }) {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkDrift } from "@ccr/core/gateway/continuity/git-state";
+import { assessDrift, checkDrift } from "@ccr/core/gateway/continuity/git-state";
 import { ContinuityService } from "@ccr/core/gateway/continuity/service";
 import { ContinuityStore } from "@ccr/core/gateway/continuity/store";
 
@@ -19,6 +19,11 @@ test("continuity drift detection distinguishes clean, dirty, head, branch, and u
     newBranch: "feature/test"
   });
   assert.deepEqual(checkDrift(checkpoint, { branch: null, headSha: null, dirty: false }), { type: "git_unavailable" });
+  assert.deepEqual(assessDrift(checkpoint, { branch: "main", headSha: "abc123", dirty: false }), {
+    drift: { type: "clean" },
+    confidence: "high",
+    score: 1
+  });
 });
 
 test("continuity store creates and retrieves the latest checkpoint by canonical project and branch", () => {
@@ -81,6 +86,28 @@ test("continuity service exposes checkpoint and git-state endpoints", () => {
     });
     assert.equal(gitState.status, 200);
     assert.deepEqual(gitState.body.gitState, { branch: null, headSha: null, dirty: false });
+  } finally {
+    service.close();
+  }
+});
+
+test("continuity service supports manual refresh and drift assessment", () => {
+  const service = new ContinuityService(new ContinuityStore(":memory:"));
+  try {
+    const refreshed = service.handleRequest({
+      body: { projectDirectory: "/tmp/toolkit", client: "codex" },
+      method: "POST",
+      url: "/__ccr/continuity/v1/checkpoints/refresh"
+    });
+    assert.equal(refreshed.status, 201);
+    const checkpoint = refreshed.body.checkpoint;
+    const assessment = service.handleRequest({
+      body: {},
+      method: "GET",
+      url: `/__ccr/continuity/v1/checkpoints/${encodeURIComponent(checkpoint.id)}/drift?projectDirectory=/tmp/toolkit`
+    });
+    assert.equal(assessment.status, 200);
+    assert.equal(assessment.body.assessment.confidence, "unknown");
   } finally {
     service.close();
   }

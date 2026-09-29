@@ -6,11 +6,15 @@
 
 export { ContinuityStore } from "./store";
 export { ContinuityService, continuityPathPrefix, canonicalProjectDirectoryKey } from "./service";
-export { captureGitState, checkDrift } from "./git-state";
+export { assessDrift, captureGitState, checkDrift } from "./git-state";
 export type {
   ProjectCheckpoint,
   GitState,
   DriftStatus,
+  DriftConfidence,
+  DriftAssessment,
+  DriftAssessmentResponse,
+  RefreshCheckpointRequest,
   CreateCheckpointRequest,
   CreateCheckpointResponse,
   GetLatestCheckpointRequest,
