@@ -21,6 +21,7 @@ import {
 } from "@ccr/core/gateway/core-runtime/router-plugin-contract.ts";
 import { coreGatewayAuthHeader } from "@ccr/core/gateway/internal/shared.ts";
 import { ccrRemoteControlPathPrefix } from "@ccr/core/gateway/remote-control-service.ts";
+import { continuityPathPrefix } from "@ccr/core/gateway/continuity/service.ts";
 import { gatewayRuntimeConfigControlPath, gatewayRuntimeConfigRevision } from "@ccr/core/gateway/runtime-config-control.ts";
 import { createGatewayPlugin } from "@ccr/core/gateway/core-runtime/router-plugin.ts";
 import { providerRuntimeId } from "@ccr/core/routing/model-registry.ts";
@@ -42,6 +43,7 @@ test("CCR router core plugin exposes route endpoint and beforeRouting transform"
 
   const plugin = await createGatewayPlugin({ plugin: { config: { appConfig: config } } });
   assert.equal(plugin.httpRoutes[0].path, ccrRouterHttpRoutePath);
+  assert.ok(plugin.httpRoutes.some((route) => route.path === continuityPathPrefix));
 
   const transformed = await plugin.requestTransforms[0].transform({
     request: {
