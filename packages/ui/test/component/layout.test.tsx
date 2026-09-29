@@ -3,6 +3,7 @@ import test from "node:test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { GatewayStartupErrorBanner, groupSidebarNavigation, MainLayout, UpdateEntryButton } from "@ccr/ui/pages/home/components/layout.tsx";
+import { OrderListView } from "@ccr/ui/pages/home/components/order-list.tsx";
 import { MediaModelConfigurationPanel, VirtualModelsView } from "@ccr/ui/pages/home/components/virtual-models.tsx";
 import { AppI18nContext, appCopy } from "@ccr/ui/pages/home/shared/i18n.tsx";
 import { createVirtualModelDraft } from "@ccr/ui/pages/home/shared/virtual-models.ts";
@@ -32,6 +33,31 @@ test("sidebar navigation groups pages and hides networking from the sidebar", ()
     ["logs"],
     ["virtual-models", "models", "api-keys", "extensions", "integrations", "control-center"]
   ]);
+});
+
+test("order list renders provider pool and execution priority columns", () => {
+  const config = appConfigFixture();
+  config.Providers = [{
+    icon: "https://example.com/provider.png",
+    models: ["model-a", "model-b"],
+    name: "Example Provider"
+  }];
+  config.Router.orderLists = {
+    global: [{ id: "global-example", model: "model-b", provider: "Example Provider" }]
+  };
+
+  const html = renderToStaticMarkup(
+    <AppI18nContext.Provider value={appCopy.en}>
+      <OrderListView config={config} onChange={() => undefined} />
+    </AppI18nContext.Provider>
+  );
+
+  assert.match(html, /Provider fallback order/);
+  assert.match(html, /All Providers/);
+  assert.match(html, /Execution priority/);
+  assert.match(html, /Example Provider/);
+  assert.match(html, />P1</);
+  assert.match(html, /value="Example Provider\/model-b" selected="">model-b/);
 });
 
 test("sidebar navigation scrolls vertically without displacing the settings footer", () => {
