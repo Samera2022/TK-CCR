@@ -33,7 +33,7 @@ import { codexApplyPatchBridgeResponseStream, prepareCodexApplyPatchBridgeReques
 import { codexMultiAgentBridgeResponseStream, prepareCodexMultiAgentBridgeRequest } from "@ccr/core/gateway/features/codex-multi-agent-bridge";
 import { rewriteAnthropicMessageStartModelStream, shouldRewriteAnthropicMessageStartModel } from "@ccr/core/gateway/features/anthropic-response-model";
 import { prepareCursorOpenAICompatChatBody } from "@ccr/core/gateway/features/cursor-compat";
-import { filteredResponseHeaders, formatError, formatUpstreamErrorForLog, forwardHeaders, inferGatewayClient, readRequestBody, sendJson, shouldCaptureGatewayUsage, shouldSendBody, stripLocalGatewayAuthHeaders } from "@ccr/core/gateway/http/io";
+import { filteredResponseHeaders, formatError, formatUpstreamErrorForLog, forwardHeaders, inferGatewayClient, readRequestBody, sendJson, shouldCaptureGatewayUsage, shouldSendBody, stripLocalGatewayAuthHeaders, stripRequestBodyEncodingHeader } from "@ccr/core/gateway/http/io";
 import { appendAggregateErrorAttemptSummary, shouldBufferAggregateErrorBody } from "@ccr/core/gateway/http/error-detail";
 import { parseJsonObjectSafe, serializeJsonBody, takeJsonObject } from "@ccr/core/gateway/http/body";
 import { createGatewayModelsResponse, prepareClaudeAppDiscoveredModelRequest, prepareClaudeCodeDiscoveredModelRequest, shouldServeGatewayModelsResponse } from "@ccr/core/gateway/features/model-discovery";
@@ -141,6 +141,7 @@ export class GatewayRequestPipeline {
       routeTrace?.captureIngress();
       const headerNormalizationStartedAt = Date.now();
       const headers = forwardHeaders(request.headers);
+      stripRequestBodyEncodingHeader(headers);
       const strippedCcrRouteHeaderChanges = stripUntrustedCcrRouteHeaders(headers);
       const previousAuthorization = headers.authorization;
       const previousApiKey = headers["x-api-key"];
