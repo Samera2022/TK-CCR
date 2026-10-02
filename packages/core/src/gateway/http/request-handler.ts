@@ -23,7 +23,7 @@ import { isModelAllowedForProfile, profileForApiKey } from "@ccr/core/profiles/m
 import { applyCors, shouldServeGatewayRequest } from "@ccr/core/gateway/core-runtime/supervisor";
 import { billingUsageSyncPath, rawTraceSyncPath } from "@ccr/core/gateway/internal/shared";
 import type { BrowserAutomationMcpIntegration } from "@ccr/core/gateway/internal/shared";
-import { handleCcrEndpoint, isCcrEndpoint } from "@ccr/core/routing/ccr-endpoints-v2";
+import { handleCcrEndpoint, isCcrEndpoint } from "@ccr/core/routing/ccr-unified-endpoints";
 
 export type GatewayHttpRequestHandlerDependencies = {
   getBrowserAutomationMcpIntegration: () => BrowserAutomationMcpIntegration | undefined;

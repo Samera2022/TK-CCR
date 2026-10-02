@@ -1,19 +1,35 @@
 /**
- * Budget tracking for model usage
+ * Budget tracking and enforcement for model usage
  */
 
-import type { ModelBudgetConfig, ModelUsage, BudgetState } from "@ccr/core/models/budget-config";
+import type {
+  ModelBudgetConfig,
+  BudgetState,
+  ModelUsage,
+  BudgetConfirmationRequest,
+} from "@ccr/core/models/budget-config";
 
 export class BudgetTracker {
-  private usage = new Map<string, ModelUsage>();
-  private config: ModelBudgetConfig;
+  private usageMap = new Map<string, ModelUsage>();
+  private budgetConfig: ModelBudgetConfig;
+  private pendingConfirmations = new Map<string, {
+    request: BudgetConfirmationRequest;
+    timestamp: number;
+  }>();
 
   constructor(config: ModelBudgetConfig) {
-    this.config = config;
+    this.budgetConfig = config;
   }
 
   /**
-   * Record token usage for a model
+   * Update configuration
+   */
+  updateConfig(config: ModelBudgetConfig): void {
+    this.budgetConfig = config;
+  }
+
+  /**
+   * Record token usage for a session and model
    */
   recordUsage(
     sessionKey: string,
@@ -21,8 +37,8 @@ export class BudgetTracker {
     inputTokens: number,
     outputTokens: number
   ): void {
-    const key = this.getUsageKey(sessionKey, model);
-    const existing = this.usage.get(key);
+    const key = `${sessionKey}:${model}`;
+    const existing = this.usageMap.get(key);
 
     if (existing) {
       existing.inputTokens += inputTokens;
@@ -31,7 +47,7 @@ export class BudgetTracker {
       existing.requestCount += 1;
       existing.lastUpdated = new Date();
     } else {
-      this.usage.set(key, {
+      this.usageMap.set(key, {
         sessionKey,
         model,
         inputTokens,
@@ -44,107 +60,156 @@ export class BudgetTracker {
   }
 
   /**
-   * Get budget state for a session/model
+   * Get budget state for a session and model
    */
-  getBudgetState(sessionKey: string, model: string): BudgetState | undefined {
-    const key = this.getUsageKey(sessionKey, model);
-    const usage = this.usage.get(key);
-    const budget = this.getBudgetLimit(model);
+  getBudgetState(sessionKey: string, model: string): BudgetState {
+    const key = `${sessionKey}:${model}`;
+    const usage = this.usageMap.get(key);
+    const used = usage?.totalTokens || 0;
 
-    if (!usage) {
-      return {
-        model,
-        budget,
-        used: 0,
-        remaining: budget,
-        percentage: 0,
-      };
-    }
+    // Get budget for this specific model or use default
+    const modelBudget = this.budgetConfig.models[model];
+    const budget = modelBudget?.budget || this.budgetConfig.defaultBudget;
 
     return {
       model,
       budget,
-      used: usage.totalTokens,
-      remaining: Math.max(0, budget - usage.totalTokens),
-      percentage: (usage.totalTokens / budget) * 100,
+      used,
+      remaining: Math.max(0, budget - used),
+      percentage: budget > 0 ? (used / budget) * 100 : 0,
     };
   }
 
   /**
-   * Check if usage is over budget
+   * Check if budget is exceeded and confirmation is needed
    */
-  isOverBudget(sessionKey: string, model: string): boolean {
+  needsConfirmation(sessionKey: string, model: string): boolean {
     const state = this.getBudgetState(sessionKey, model);
-    return state ? state.used > state.budget : false;
+    const modelBudget = this.budgetConfig.models[model];
+    const threshold = modelBudget?.warningThreshold || this.budgetConfig.warningThreshold;
+
+    return state.percentage >= threshold;
   }
 
   /**
-   * Reset budget for a session/model
+   * Create a pending confirmation request
    */
-  resetBudget(sessionKey: string, model: string): void {
-    const key = this.getUsageKey(sessionKey, model);
-    this.usage.delete(key);
+  createConfirmationRequest(
+    sessionKey: string,
+    model: string,
+    taskContext?: string
+  ): BudgetConfirmationRequest {
+    const state = this.getBudgetState(sessionKey, model);
+    const request: BudgetConfirmationRequest = {
+      model,
+      currentUsage: state.used,
+      budgetLimit: state.budget,
+      taskContext,
+    };
+
+    const key = `${sessionKey}:${model}`;
+    this.pendingConfirmations.set(key, {
+      request,
+      timestamp: Date.now(),
+    });
+
+    return request;
   }
 
   /**
-   * Extend budget temporarily
+   * Check if there's a pending confirmation
    */
-  extendBudget(_sessionKey: string, model: string, additional: number): void {
-    // For temporary extension, we modify the config for this session
-    // In a production system, this would be tracked separately
-    const modelConfig = this.config.models[model];
-    if (modelConfig) {
-      modelConfig.budget += additional;
+  hasPendingConfirmation(sessionKey: string, model: string): boolean {
+    const key = `${sessionKey}:${model}`;
+    const pending = this.pendingConfirmations.get(key);
+    
+    if (!pending) return false;
+
+    // Expire confirmations after 5 minutes
+    const age = Date.now() - pending.timestamp;
+    if (age > 5 * 60 * 1000) {
+      this.pendingConfirmations.delete(key);
+      return false;
     }
+
+    return true;
   }
 
   /**
-   * Get budget limit for a model
+   * Clear pending confirmation
    */
-  private getBudgetLimit(model: string): number {
-    const modelConfig = this.config.models[model];
-    return modelConfig?.budget ?? this.config.defaultBudget;
+  clearPendingConfirmation(sessionKey: string, model: string): void {
+    const key = `${sessionKey}:${model}`;
+    this.pendingConfirmations.delete(key);
   }
 
   /**
-   * Generate usage key
+   * Get usage for a session across all models
    */
-  private getUsageKey(sessionKey: string, model: string): string {
-    return `${sessionKey}:${model}`;
-  }
-
-  /**
-   * Clear expired budgets
-   */
-  clearExpiredBudgets(maxAge: number = 24 * 60 * 60 * 1000): number {
-    const now = Date.now();
-    let cleared = 0;
-
-    for (const [key, usage] of this.usage.entries()) {
-      if (now - usage.lastUpdated.getTime() > maxAge) {
-        this.usage.delete(key);
-        cleared++;
+  getSessionUsage(sessionKey: string): ModelUsage[] {
+    const result: ModelUsage[] = [];
+    for (const [key, usage] of this.usageMap) {
+      if (usage.sessionKey === sessionKey) {
+        result.push(usage);
       }
     }
+    return result;
+  }
 
-    return cleared;
+  /**
+   * Reset usage for a session and model
+   */
+  resetUsage(sessionKey: string, model?: string): void {
+    if (model) {
+      const key = `${sessionKey}:${model}`;
+      this.usageMap.delete(key);
+    } else {
+      // Reset all models for this session
+      for (const key of this.usageMap.keys()) {
+        if (key.startsWith(`${sessionKey}:`)) {
+          this.usageMap.delete(key);
+        }
+      }
+    }
+  }
+
+  /**
+   * Clean up old entries (older than 24 hours)
+   */
+  cleanupOldEntries(): void {
+    const now = Date.now();
+    const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+
+    for (const [key, usage] of this.usageMap) {
+      const age = now - usage.lastUpdated.getTime();
+      if (age > maxAge) {
+        this.usageMap.delete(key);
+      }
+    }
   }
 }
 
-// Singleton instance
-let instance: BudgetTracker | undefined;
+// Global instance
+let globalBudgetTracker: BudgetTracker | null = null;
 
-export function getBudgetTracker(config?: ModelBudgetConfig): BudgetTracker {
-  if (!instance && config) {
-    instance = new BudgetTracker(config);
-  }
-  if (!instance) {
-    // Default config
-    instance = new BudgetTracker({
-      defaultBudget: 100000,
-      warningThreshold: 0.8,
+/**
+ * Get or create the global budget tracker
+ */
+export function getBudgetTracker(): BudgetTracker {
+  if (!globalBudgetTracker) {
+    // Default configuration
+    globalBudgetTracker = new BudgetTracker({
+      defaultBudget: 1000000, // 1M tokens
+      warningThreshold: 90, // 90%
       models: {},
     });
   }
-  return instance;
+  return globalBudgetTracker;
+}
+
+/**
+ * Initialize budget tracker with configuration
+ */
+export function initializeBudgetTracker(config: ModelBudgetConfig): void {
+  globalBudgetTracker = new BudgetTracker(config);
 }
