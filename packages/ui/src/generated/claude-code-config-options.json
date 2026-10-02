@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-29T13:04:28.882Z",
+  "generatedAt": "2026-10-02T13:12:42.136Z",
   "generatedBy": "scripts/generate-claude-code-config-options.mjs",
   "sourceUrls": {
     "envEn": "https://code.claude.com/docs/en/env-vars.md",
@@ -73,6 +73,22 @@
       }
     },
     {
+      "key": "allowClaudeInChromeWithManagedMcp",
+      "path": [
+        "allowClaudeInChromeWithManagedMcp"
+      ],
+      "scope": "Managed, from the device's own managed settings only: an MDM-deployed plist or HKLM registry key, or a system managed-settings.json file. Claude Code ignores it in server-managed settings, in the user-writable HKCU registry, and in user or project settings.",
+      "type": "Boolean",
+      "default": "false, so a deployed managed-mcp.json blocks Claude in Chrome in terminal sessions",
+      "example": "{\n  \"allowClaudeInChromeWithManagedMcp\": true\n}",
+      "valueKind": "boolean",
+      "enumValues": [],
+      "description": {
+        "en": "Let the built-in Claude in Chrome server run alongside a deployed managed-mcp.json. Without this key, a deployed managed-mcp.json blocks Claude in Chrome in terminal sessions. Requires Claude Code v2.1.282 or later.",
+        "zh": "Let the built-in Claude in Chrome server run alongside a deployed managed-mcp.json. Without this key, a deployed managed-mcp.json blocks Claude in Chrome in terminal sessions. Requires Claude Code v2.1.282 or later."
+      }
+    },
+    {
       "key": "allowedChannelPlugins",
       "path": [
         "allowedChannelPlugins"
@@ -116,8 +132,33 @@
       "valueKind": "number",
       "enumValues": [],
       "description": {
-        "en": "Allowlist the MCP servers people can add. Claude Code blocks any server that doesn't match an entry wherever it's defined, including plugin servers, servers passed with --mcp-config, and servers from claude.ai.",
-        "zh": "Allowlist the MCP servers people can add. Claude Code blocks any server that doesn't match an entry wherever it's defined, including plugin servers, servers passed with --mcp-config, and servers from claude.ai."
+        "en": "Allowlist the MCP servers people can add. Claude Code blocks any server that doesn't match an entry wherever it's defined, including plugin servers, servers a user passes with --mcp-config, and servers from claude.ai.",
+        "zh": "Allowlist the MCP servers people can add. Claude Code blocks any server that doesn't match an entry wherever it's defined, including plugin servers, servers a user passes with --mcp-config, and servers from claude.ai."
+      }
+    },
+    {
+      "key": "allowedProviders",
+      "path": [
+        "allowedProviders"
+      ],
+      "scope": "Managed. A list that the machine's own admin sources set, MDM policies and managed settings files, keeps applying when server-managed settings also deliver one: a session may then use only the providers on both lists, so a server-managed list can narrow what the machine allows but never widen it. Which machine source's allowedProviders counts follows how Claude Code combines managed sources. A list delivered through server-managed settings alone reaches only the sessions that fetch server-managed settings.",
+      "type": "array of strings, each one of:",
+      "default": "unset, so any provider can be used",
+      "example": "{\n  \"allowedProviders\": [\"anthropic\", \"bedrock\"]\n}",
+      "valueKind": "array",
+      "enumValues": [
+        "anthropic",
+        "bedrock",
+        "vertex",
+        "foundry",
+        "anthropicAws",
+        "mantle",
+        "customEndpoint",
+        "gateway"
+      ],
+      "description": {
+        "en": "List the services a machine may reach Claude through, such as the Anthropic API, Amazon Bedrock, or an LLM gateway. A session on a provider that isn't listed is refused at startup, at login, and when it next contacts the API, so switching to an unlisted provider mid-session is refused too. The refusal message names what selected the provider and the steps to continue. Requires Claude Code v2.1.285 or later.",
+        "zh": "List the services a machine may reach Claude through, such as the Anthropic API, Amazon Bedrock, or an LLM gateway. A session on a provider that isn't listed is refused at startup, at login, and when it next contacts the API, so switching to an unlisted provider mid-session is refused too. The refusal message names what selected the provider and the steps to continue. Requires Claude Code v2.1.285 or later."
       }
     },
     {
@@ -198,6 +239,22 @@
       "description": {
         "en": "Run your own command to produce the credential Claude Code sends with model requests. Claude Code runs the command through the system shell, /bin/sh on macOS and Linux and cmd on Windows, and sends its output as both the X-Api-Key and Authorization: Bearer headers. Use it for dynamic or rotating credentials, such as short-lived tokens fetched from a vault.",
         "zh": "Run your own command to produce the credential Claude Code sends with model requests. Claude Code runs the command through the system shell, /bin/sh on macOS and Linux and cmd on Windows, and sends its output as both the X-Api-Key and Authorization: Bearer headers. Use it for dynamic or rotating credentials, such as short-lived tokens fetched from a vault."
+      }
+    },
+    {
+      "key": "appendPlugins",
+      "path": [
+        "appendPlugins"
+      ],
+      "scope": "User or managed. Claude Code reads the key from managed settings. It reads the key from user settings only on a machine with no managed settings, for a user who isn't signed in with a Team or Enterprise plan. It ignores the key in project and local settings and in a --settings file.",
+      "type": "array of plugin-name@marketplace-name strings",
+      "default": "unset",
+      "example": "{\n  \"extraKnownMarketplaces\": {\n    \"acme-tools\": {\n      \"source\": { \"source\": \"directory\", \"path\": \"/opt/acme/claude-plugins\" }\n    }\n  },\n  \"enabledPlugins\": { \"acme-audit@acme-tools\": true },\n  \"appendPlugins\": [\"acme-audit@acme-tools\"]\n}",
+      "valueKind": "array",
+      "enumValues": [],
+      "description": {
+        "en": "List the managed plugins whose mods run after every mod a user installs, in the listed order. An id listed in both prependPlugins and appendPlugins is prepended. In managed settings, Claude Code skips an id whose plugin doesn't count as your organization's.",
+        "zh": "List the managed plugins whose mods run after every mod a user installs, in the listed order. An id listed in both prependPlugins and appendPlugins is prepended. In managed settings, Claude Code skips an id whose plugin doesn't count as your organization's."
       }
     },
     {
@@ -997,8 +1054,8 @@
       "valueKind": "boolean",
       "enumValues": [],
       "description": {
-        "en": "Reject the --plugin-dir, --plugin-url, --agents, and --mcp-config CLI flags at startup, which users could otherwise pass to bypass strictKnownMarketplaces for a single run. Claude Code exits with an error naming the rejected flags, and applies the same check to surfaces that start the CLI with these flags internally, currently Cowork local sessions in the desktop app. In cloud sessions, Claude Code drops the MCP servers the server delivered through --mcp-config, other than in-process type: \"sdk\" entries, and starts the session. Requires Claude Code v2.1.193 or later.",
-        "zh": "Reject the --plugin-dir, --plugin-url, --agents, and --mcp-config CLI flags at startup, which users could otherwise pass to bypass strictKnownMarketplaces for a single run. Claude Code exits with an error naming the rejected flags, and applies the same check to surfaces that start the CLI with these flags internally, currently Cowork local sessions in the desktop app. In cloud sessions, Claude Code drops the MCP servers the server delivered through --mcp-config, other than in-process type: \"sdk\" entries, and starts the session. Requires Claude Code v2.1.193 or later."
+        "en": "Reject the --plugin-dir, --plugin-url, --agents, and --mcp-config CLI flags at startup, which users could otherwise pass to bypass strictKnownMarketplaces for a single run. Claude Code exits with an error naming the rejected flags. In cloud sessions, Claude Code instead starts the session and drops every server-delivered --mcp-config entry except in-process type: \"sdk\" entries and a Claude Tag session's Slack tools. Requires Claude Code v2.1.193 or later.",
+        "zh": "Reject the --plugin-dir, --plugin-url, --agents, and --mcp-config CLI flags at startup, which users could otherwise pass to bypass strictKnownMarketplaces for a single run. Claude Code exits with an error naming the rejected flags. In cloud sessions, Claude Code instead starts the session and drops every server-delivered --mcp-config entry except in-process type: \"sdk\" entries and a Claude Tag session's Slack tools. Requires Claude Code v2.1.193 or later."
       }
     },
     {
@@ -1797,7 +1854,7 @@
         "permissions",
         "additionalDirectories"
       ],
-      "scope": "Any file",
+      "scope": "Any file, with limits on the sandbox write access that project and local entries give",
       "type": "array of directory paths",
       "default": "unset",
       "example": "{\n  \"permissions\": {\n    \"additionalDirectories\": [\"../docs/\"]\n  }\n}",
@@ -1848,15 +1905,15 @@
         "permissions",
         "blockReadsOutsideWorkingDirectories"
       ],
-      "scope": "Any file. If any settings source sets true, the block applies, so a repository's checked-in file can turn the block on for a project but can't lift a block you set.",
+      "scope": "Any file. A true in any file applies, so a repository can turn the block on for itself but can't lift yours.",
       "type": "Boolean",
-      "default": "unset, so reads outside the working directories follow your permission mode and rules",
+      "default": "unset, so reads outside the working directories follow your permission mode",
       "example": "{\n  \"permissions\": {\n    \"blockReadsOutsideWorkingDirectories\": true\n  }\n}",
       "valueKind": "boolean",
       "enumValues": [],
       "description": {
-        "en": "Stop Claude from reading paths outside the session's working directories with the Read, Grep, Glob, and LSP tools, in every permission mode including bypassPermissions. A Bash command that reads a matching path through a file command Claude Code recognizes, such as cat, prompts you even in auto mode and bypassPermissions mode. Requires Claude Code v2.1.257 or later.",
-        "zh": "Stop Claude from reading paths outside the session's working directories with the Read, Grep, Glob, and LSP tools, in every permission mode including bypassPermissions. A Bash command that reads a matching path through a file command Claude Code recognizes, such as cat, prompts you even in auto mode and bypassPermissions mode. Requires Claude Code v2.1.257 or later."
+        "en": "Make Claude's file tools refuse reads outside your working directories in every permission mode, including bypassPermissions. Claude Code denies Read, Grep, Glob, and LSP calls on those paths and tells Claude to ask you to add the directory with /add-dir. Files Claude Code itself needs stay readable, such as your skills, plugins, rules, agents, commands, and the CLAUDE.md memory file under ~/.claude/. Requires Claude Code v2.1.257 or later.",
+        "zh": "Make Claude's file tools refuse reads outside your working directories in every permission mode, including bypassPermissions. Claude Code denies Read, Grep, Glob, and LSP calls on those paths and tells Claude to ask you to add the directory with /add-dir. Files Claude Code itself needs stay readable, such as your skills, plugins, rules, agents, commands, and the CLAUDE.md memory file under ~/.claude/. Requires Claude Code v2.1.257 or later."
       }
     },
     {
@@ -2090,6 +2147,22 @@
       }
     },
     {
+      "key": "prependPlugins",
+      "path": [
+        "prependPlugins"
+      ],
+      "scope": "User or managed. Claude Code reads the key from managed settings. It reads the key from user settings only on a machine with no managed settings, for a user who isn't signed in with a Team or Enterprise plan. It ignores the key in project and local settings and in a --settings file.",
+      "type": "array of plugin-name@marketplace-name strings",
+      "default": "unset",
+      "example": "{\n  \"extraKnownMarketplaces\": {\n    \"acme-tools\": {\n      \"source\": { \"source\": \"directory\", \"path\": \"/opt/acme/claude-plugins\" }\n    }\n  },\n  \"enabledPlugins\": { \"acme-guard@acme-tools\": true },\n  \"prependPlugins\": [\"acme-guard@acme-tools\", \"sec-default@builtin\"]\n}",
+      "valueKind": "array",
+      "enumValues": [],
+      "description": {
+        "en": "List the managed plugins whose mods run before every mod a user installs, in the listed order. When you set this key in managed settings, name sec-default@builtin in the list to keep the built-in guard. In managed settings, Claude Code skips an id whose plugin doesn't count as your organization's. See Install your organization's mods and set the order for those conditions and for how the two ordering keys work together.",
+        "zh": "List the managed plugins whose mods run before every mod a user installs, in the listed order. When you set this key in managed settings, name sec-default@builtin in the list to keep the built-in guard. In managed settings, Claude Code skips an id whose plugin doesn't count as your organization's. See Install your organization's mods and set the order for those conditions and for how the two ordering keys work together."
+      }
+    },
+    {
       "key": "processWrapper",
       "path": [
         "processWrapper"
@@ -2292,15 +2365,15 @@
         "sandbox",
         "allowUnsandboxedCommands"
       ],
-      "scope": "Any file",
+      "scope": "Any file, with a limit on project and local settings",
       "type": "Boolean",
       "default": "true",
       "example": "{\n  \"sandbox\": {\n    \"enabled\": true,\n    \"allowUnsandboxedCommands\": false\n  }\n}",
       "valueKind": "boolean",
       "enumValues": [],
       "description": {
-        "en": "Let Claude retry a command outside the sandbox with the dangerouslyDisableSandbox parameter after the sandbox blocks it. Set it to false so Claude Code ignores that parameter completely and every command Claude runs must be sandboxed or appear in excludedCommands. The /sandbox Overrides tab shows that state as Strict sandbox mode. Use false in managed settings for policies that require strict sandboxing.",
-        "zh": "Let Claude retry a command outside the sandbox with the dangerouslyDisableSandbox parameter after the sandbox blocks it. Set it to false so Claude Code ignores that parameter completely and every command Claude runs must be sandboxed or appear in excludedCommands. The /sandbox Overrides tab shows that state as Strict sandbox mode. Use false in managed settings for policies that require strict sandboxing."
+        "en": "Let Claude retry a command outside the sandbox with the dangerouslyDisableSandbox parameter after the sandbox blocks it. When it's false, Claude Code ignores that parameter. While the sandbox is running, commands Claude runs are then sandboxed unless they match an excludedCommands entry. The /sandbox Overrides tab shows that state as Strict sandbox mode. A false in managed settings turns on strict sandbox mode for the developers it covers.",
+        "zh": "Let Claude retry a command outside the sandbox with the dangerouslyDisableSandbox parameter after the sandbox blocks it. When it's false, Claude Code ignores that parameter. While the sandbox is running, commands Claude runs are then sandboxed unless they match an excludedCommands entry. The /sandbox Overrides tab shows that state as Strict sandbox mode. A false in managed settings turns on strict sandbox mode for the developers it covers."
       }
     },
     {
@@ -2453,7 +2526,7 @@
         "sandbox",
         "enabled"
       ],
-      "scope": "Any file",
+      "scope": "Any file, with limits on project and local settings",
       "type": "Boolean",
       "default": "false",
       "example": "{\n  \"sandbox\": {\n    \"enabled\": true\n  }\n}",
@@ -2470,7 +2543,7 @@
         "sandbox",
         "enableWeakerNestedSandbox"
       ],
-      "scope": "Any file",
+      "scope": "Any file, with limits on project and local settings",
       "type": "Boolean",
       "default": "false",
       "example": "{\n  \"sandbox\": {\n    \"enabled\": true,\n    \"enableWeakerNestedSandbox\": true\n  }\n}",
@@ -2487,7 +2560,7 @@
         "sandbox",
         "enableWeakerNetworkIsolation"
       ],
-      "scope": "Any file",
+      "scope": "Any file, with limits on project and local settings",
       "type": "Boolean",
       "default": "false",
       "example": "{\n  \"sandbox\": {\n    \"enabled\": true,\n    \"enableWeakerNetworkIsolation\": true\n  }\n}",
@@ -2504,15 +2577,15 @@
         "sandbox",
         "excludedCommands"
       ],
-      "scope": "Any file",
+      "scope": "Any file, with limits on project and local settings",
       "type": "array of command patterns",
       "default": "unset, so no command is excluded",
       "example": "{\n  \"sandbox\": {\n    \"excludedCommands\": [\"docker *\"]\n  }\n}",
       "valueKind": "array",
       "enumValues": [],
       "description": {
-        "en": "Name commands that Claude Code runs outside the sandbox, such as tools that don't work under it. Each entry uses the same syntax as the content of a Bash(...) permission rule: an exact command, a prefix such as docker *, or a wildcard pattern.",
-        "zh": "Name commands that Claude Code runs outside the sandbox, such as tools that don't work under it. Each entry uses the same syntax as the content of a Bash(...) permission rule: an exact command, a prefix such as docker *, or a wildcard pattern."
+        "en": "Name commands that Claude Code runs outside the sandbox, such as tools that don't work under it. Each entry uses the same syntax as the content of a Bash(...) permission rule: an exact command, a prefix such as docker *, or a wildcard pattern. A pattern with no wildcard is an exact match, so docker matches only docker with no arguments.",
+        "zh": "Name commands that Claude Code runs outside the sandbox, such as tools that don't work under it. Each entry uses the same syntax as the content of a Bash(...) permission rule: an exact command, a prefix such as docker *, or a wildcard pattern. A pattern with no wildcard is an exact match, so docker matches only docker with no arguments."
       }
     },
     {
@@ -2521,15 +2594,15 @@
         "sandbox",
         "failIfUnavailable"
       ],
-      "scope": "Any file",
+      "scope": "Any file, with limits on project and local settings",
       "type": "Boolean",
       "default": "false",
       "example": "{\n  \"sandbox\": {\n    \"enabled\": true,\n    \"failIfUnavailable\": true\n  }\n}",
       "valueKind": "boolean",
       "enumValues": [],
       "description": {
-        "en": "Make Claude Code exit with an error at startup when sandbox.enabled is true but the sandbox can't start, because a dependency is missing or the platform is unsupported. Without it, Claude Code shows a warning and runs commands unsandboxed. Use it in managed settings when your organization requires sandboxing as a hard gate.",
-        "zh": "Make Claude Code exit with an error at startup when sandbox.enabled is true but the sandbox can't start, because a dependency is missing or the platform is unsupported. Without it, Claude Code shows a warning and runs commands unsandboxed. Use it in managed settings when your organization requires sandboxing as a hard gate."
+        "en": "Make Claude Code exit with an error at startup when sandbox.enabled is true but the sandbox can't start, because a dependency is missing or the platform is unsupported. Without this key, Claude Code runs commands unsandboxed. Managed deployments that require sandboxing as a security gate can use this setting.",
+        "zh": "Make Claude Code exit with an error at startup when sandbox.enabled is true but the sandbox can't start, because a dependency is missing or the platform is unsupported. Without this key, Claude Code runs commands unsandboxed. Managed deployments that require sandboxing as a security gate can use this setting."
       }
     },
     {
@@ -2574,7 +2647,7 @@
         "filesystem",
         "allowRead"
       ],
-      "scope": "Any file",
+      "scope": "Any file, with limits on project and local settings",
       "type": "array of path strings, using the sandbox path prefixes",
       "default": "unset",
       "example": "{\n  \"sandbox\": {\n    \"filesystem\": {\n      \"denyRead\": [\"~/\"],\n      \"allowRead\": [\".\"]\n    }\n  }\n}",
@@ -2592,7 +2665,7 @@
         "filesystem",
         "allowWrite"
       ],
-      "scope": "Any file",
+      "scope": "Any file, with limits on project and local settings",
       "type": "array of path strings, using the sandbox path prefixes",
       "default": "unset, so sandboxed commands can write to the working directory, the per-user temp directory, directories you've added with --add-dir or /add-dir, and directories in permissions.additionalDirectories",
       "example": "{\n  \"sandbox\": {\n    \"filesystem\": {\n      \"allowWrite\": [\"/tmp/build\", \"~/.kube\"]\n    }\n  }\n}",
@@ -2663,7 +2736,7 @@
         "sandbox",
         "ignoreViolations"
       ],
-      "scope": "Any file",
+      "scope": "Any file, with limits on project and local settings",
       "type": "object mapping a command substring to an array of violation substrings, usually paths",
       "default": "unset, so every violation is reported",
       "example": "{\n  \"sandbox\": {\n    \"ignoreViolations\": {\n      \"*\": [\"/etc/hosts\"]\n    }\n  }\n}",
@@ -2682,7 +2755,7 @@
       ],
       "scope": "Any file. strictAllowlist, allowManagedDomainsOnly, and tlsTerminate are read from fewer sources, as their entries say.",
       "type": "object with the sub-keys below",
-      "default": "unset, so no domains are pre-allowed and the sandbox prompts for each new host",
+      "default": "unset, so no domains are pre-allowed and your permission mode decides what happens to each new host",
       "example": "{\n  \"sandbox\": {\n    \"network\": {\n      \"allowedDomains\": [\"github.com\", \"*.npmjs.org\"],\n      \"deniedDomains\": [\"uploads.github.com\"],\n      \"allowLocalBinding\": true\n    }\n  }\n}",
       "valueKind": "object",
       "enumValues": [],
@@ -2698,7 +2771,7 @@
         "network",
         "allowAllUnixSockets"
       ],
-      "scope": "Any file",
+      "scope": "Any file, with limits on project and local settings",
       "type": "Boolean",
       "default": "false",
       "example": "{\n  \"sandbox\": {\n    \"network\": {\n      \"allowAllUnixSockets\": true\n    }\n  }\n}",
@@ -2716,9 +2789,9 @@
         "network",
         "allowedDomains"
       ],
-      "scope": "Any file. Only managed settings when allowManagedDomainsOnly is set.",
+      "scope": "Any file, with limits on project and local settings. Only managed settings when allowManagedDomainsOnly is set.",
       "type": "array of strings, each a domain, wildcard pattern, or IP literal, with an optional :port suffix",
-      "default": "unset, so the sandbox prompts the first time a command reaches a new host",
+      "default": "unset, so your permission mode decides what happens to each new host",
       "example": "{\n  \"sandbox\": {\n    \"network\": {\n      \"allowedDomains\": [\"github.com\", \"*.npmjs.org\", \"api.example.com:443\"]\n    }\n  }\n}",
       "valueKind": "array",
       "enumValues": [],
@@ -2734,15 +2807,15 @@
         "network",
         "allowLocalBinding"
       ],
-      "scope": "Any file",
+      "scope": "Any file, with limits on project and local settings",
       "type": "Boolean",
       "default": "false",
       "example": "{\n  \"sandbox\": {\n    \"network\": {\n      \"allowLocalBinding\": true\n    }\n  }\n}",
       "valueKind": "boolean",
       "enumValues": [],
       "description": {
-        "en": "Let sandboxed commands bind to localhost ports on macOS, for example to start a dev server.",
-        "zh": "Let sandboxed commands bind to localhost ports on macOS, for example to start a dev server."
+        "en": "Let sandboxed commands on macOS listen on network ports, for example to start a dev server, and connect to any port on localhost. A command that listens on a non-loopback address accepts connections from other machines. The key has no effect on Linux and WSL2, where each sandboxed command has its own loopback interface. To reach a server on the host from Linux or WSL2, see A command fails to reach a server on localhost.",
+        "zh": "Let sandboxed commands on macOS listen on network ports, for example to start a dev server, and connect to any port on localhost. A command that listens on a non-loopback address accepts connections from other machines. The key has no effect on Linux and WSL2, where each sandboxed command has its own loopback interface. To reach a server on the host from Linux or WSL2, see A command fails to reach a server on localhost."
       }
     },
     {
@@ -2752,7 +2825,7 @@
         "network",
         "allowMachLookup"
       ],
-      "scope": "Any file",
+      "scope": "Any file, with limits on project and local settings",
       "type": "array of strings, each a service name; a single trailing matches a prefix, and \"\" alone matches every service",
       "default": "unset",
       "example": "{\n  \"sandbox\": {\n    \"network\": {\n      \"allowMachLookup\": [\"com.apple.coresimulator.*\"]\n    }\n  }\n}",
@@ -2788,7 +2861,7 @@
         "network",
         "allowUnixSockets"
       ],
-      "scope": "Any file",
+      "scope": "Any file, with limits on project and local settings",
       "type": "array of strings, each a socket path",
       "default": "unset, so the macOS sandbox blocks every Unix socket",
       "example": "{\n  \"sandbox\": {\n    \"network\": {\n      \"allowUnixSockets\": [\"~/.ssh/agent-socket\"]\n    }\n  }\n}",
@@ -2824,15 +2897,15 @@
         "network",
         "httpProxyPort"
       ],
-      "scope": "Any file",
+      "scope": "Any file, unless other sandbox settings limit which files can set a port",
       "type": "number, a local TCP port",
       "default": "unset, so Claude Code runs its own proxy",
       "example": "{\n  \"sandbox\": {\n    \"network\": {\n      \"httpProxyPort\": 8080\n    }\n  }\n}",
       "valueKind": "number",
       "enumValues": [],
       "description": {
-        "en": "Point the sandbox at your own HTTP proxy instead of the one Claude Code runs. Organizations do this to inspect HTTPS traffic, apply their own filtering rules, or log every request. When unset, Claude Code starts its own proxy for HTTP traffic.",
-        "zh": "Point the sandbox at your own HTTP proxy instead of the one Claude Code runs. Organizations do this to inspect HTTPS traffic, apply their own filtering rules, or log every request. When unset, Claude Code starts its own proxy for HTTP traffic."
+        "en": "Point the sandbox at your own HTTP proxy instead of the one Claude Code runs. Organizations do this to inspect HTTPS traffic, apply their own filtering rules, or log requests. Your proxy takes over filtering, and Claude Code stops applying its domain lists and network prompts to traffic sent there. When unset, Claude Code starts its own proxy for HTTP traffic.",
+        "zh": "Point the sandbox at your own HTTP proxy instead of the one Claude Code runs. Organizations do this to inspect HTTPS traffic, apply their own filtering rules, or log requests. Your proxy takes over filtering, and Claude Code stops applying its domain lists and network prompts to traffic sent there. When unset, Claude Code starts its own proxy for HTTP traffic."
       }
     },
     {
@@ -2842,15 +2915,15 @@
         "network",
         "socksProxyPort"
       ],
-      "scope": "Any file",
+      "scope": "Any file, unless other sandbox settings limit which files can set a port",
       "type": "number, a local TCP port",
       "default": "unset, so Claude Code runs its own proxy",
       "example": "{\n  \"sandbox\": {\n    \"network\": {\n      \"socksProxyPort\": 8081\n    }\n  }\n}",
       "valueKind": "number",
       "enumValues": [],
       "description": {
-        "en": "Point the sandbox at your own SOCKS5 proxy instead of the one Claude Code runs. When unset, Claude Code starts its own proxy for SOCKS traffic.",
-        "zh": "Point the sandbox at your own SOCKS5 proxy instead of the one Claude Code runs. When unset, Claude Code starts its own proxy for SOCKS traffic."
+        "en": "Point the sandbox at your own SOCKS5 proxy instead of the one Claude Code runs. Your proxy takes over filtering, and Claude Code stops applying its domain lists and network prompts to traffic sent there. When unset, Claude Code starts its own proxy for SOCKS traffic.",
+        "zh": "Point the sandbox at your own SOCKS5 proxy instead of the one Claude Code runs. Your proxy takes over filtering, and Claude Code stops applying its domain lists and network prompts to traffic sent there. When unset, Claude Code starts its own proxy for SOCKS traffic."
       }
     },
     {
@@ -2867,8 +2940,8 @@
       "valueKind": "boolean",
       "enumValues": [],
       "description": {
-        "en": "Deny sandboxed commands access to hosts outside the allowlist instead of prompting for approval. The allowlist is allowedDomains plus domains from WebFetch(domain:...) allow rules, or only the managed settings entries when allowManagedDomainsOnly is set. Requires Claude Code v2.1.219 or later.",
-        "zh": "Deny sandboxed commands access to hosts outside the allowlist instead of prompting for approval. The allowlist is allowedDomains plus domains from WebFetch(domain:...) allow rules, or only the managed settings entries when allowManagedDomainsOnly is set. Requires Claude Code v2.1.219 or later."
+        "en": "Deny sandboxed commands access to hosts outside the allowlist instead of prompting for approval. The allowlist is allowedDomains plus domains from WebFetch(domain:...) allow rules, or only the managed settings entries when allowManagedDomainsOnly is set. Locks that apply without an admin-required sandbox covers a repository's entries. Requires Claude Code v2.1.219 or later.",
+        "zh": "Deny sandboxed commands access to hosts outside the allowlist instead of prompting for approval. The allowlist is allowedDomains plus domains from WebFetch(domain:...) allow rules, or only the managed settings entries when allowManagedDomainsOnly is set. Locks that apply without an admin-required sandbox covers a repository's entries. Requires Claude Code v2.1.219 or later."
       }
     },
     {
@@ -3116,8 +3189,8 @@
       "valueKind": "object",
       "enumValues": [],
       "description": {
-        "en": "Add your own tips to the spinner tips that Claude Code shows while Claude works, or replace the built-in tips with yours. Claude Code puts your tips in the same rotation as the built-in ones: it picks the tip that has gone unshown the longest, skips tips still in their cooldown, and breaks ties by priority.",
-        "zh": "Add your own tips to the spinner tips that Claude Code shows while Claude works, or replace the built-in tips with yours. Claude Code puts your tips in the same rotation as the built-in ones: it picks the tip that has gone unshown the longest, skips tips still in their cooldown, and breaks ties by priority."
+        "en": "Add your own tips to the spinner tips that Claude Code shows while Claude works, or replace the built-in tips with yours. Claude Code puts your tips in the same rotation as the built-in ones.",
+        "zh": "Add your own tips to the spinner tips that Claude Code shows while Claude works, or replace the built-in tips with yours. Claude Code puts your tips in the same rotation as the built-in ones."
       }
     },
     {
@@ -3232,8 +3305,8 @@
       "valueKind": "array",
       "enumValues": [],
       "description": {
-        "en": "Lock the agents surface. Claude Code stops loading agents from ~/.claude/agents/ and .claude/agents/, and keeps loading plugin agents, built-in agents, and agents in the managed policy directory.",
-        "zh": "Lock the agents surface. Claude Code stops loading agents from ~/.claude/agents/ and .claude/agents/, and keeps loading plugin agents, built-in agents, and agents in the managed policy directory."
+        "en": "Lock the agents surface. Claude Code stops loading agents from ~/.claude/agents/, .claude/agents/, and --add-dir directories. It keeps loading plugin agents, built-in agents, and agents in the managed policy directory.",
+        "zh": "Lock the agents surface. Claude Code stops loading agents from ~/.claude/agents/, .claude/agents/, and --add-dir directories. It keeps loading plugin agents, built-in agents, and agents in the managed policy directory."
       }
     },
     {
@@ -3283,8 +3356,8 @@
       "valueKind": "array",
       "enumValues": [],
       "description": {
-        "en": "Lock the skills surface. Claude Code stops loading skills from ~/.claude/skills/ and .claude/skills/, custom commands from ~/.claude/commands/ and .claude/commands/, skills under --add-dir directories, and skills synced from your claude.ai account, and keeps loading plugin skills, bundled skills, and skills in the managed policy directory.",
-        "zh": "Lock the skills surface. Claude Code stops loading skills from ~/.claude/skills/ and .claude/skills/, custom commands from ~/.claude/commands/ and .claude/commands/, skills under --add-dir directories, and skills synced from your claude.ai account, and keeps loading plugin skills, bundled skills, and skills in the managed policy directory."
+        "en": "Lock the skills surface. Claude Code stops loading skills from ~/.claude/skills/ and .claude/skills/, custom commands from ~/.claude/commands/ and .claude/commands/, skills and commands under --add-dir directories, and skills synced from your claude.ai account. It keeps loading plugin skills, bundled skills, and skills in the managed policy directory.",
+        "zh": "Lock the skills surface. Claude Code stops loading skills from ~/.claude/skills/ and .claude/skills/, custom commands from ~/.claude/commands/ and .claude/commands/, skills and commands under --add-dir directories, and skills synced from your claude.ai account. It keeps loading plugin skills, bundled skills, and skills in the managed policy directory."
       }
     },
     {

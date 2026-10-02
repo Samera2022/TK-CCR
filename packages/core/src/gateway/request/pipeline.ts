@@ -62,6 +62,7 @@ import {
 } from "@ccr/core/gateway/core-runtime/router-plugin-contract";
 import { isRecord } from "@ccr/core/gateway/internal/value";
 import { combineStreamExperienceMetrics, createStreamExperienceMeter, monotonicNowMs } from "@ccr/core/observability/stream-experience";
+import { applySessionModelBinding } from "@ccr/core/gateway/features/model-switching";
 
 export type GatewayRequestPipelineDependencies = {
   getBrowserWebSearchMcpIntegration: () => BrowserWebSearchMcpIntegration | undefined;
@@ -252,6 +253,34 @@ export class GatewayRequestPipeline {
           target: routedModel ? { model: routedModel } : undefined
         });
       }
+
+      // Apply session model binding if one exists
+      const modelSwitchingStartedAt = Date.now();
+      const modelSwitchingResult = applySessionModelBinding(headers, bodyToForward.toString());
+      if (modelSwitchingResult.bodyModified && modelSwitchingResult.body) {
+        bodyToForward = Buffer.from(modelSwitchingResult.body);
+        routedModel = modelSwitchingResult.boundModel;
+        headers["x-ccr-model-binding"] = "applied";
+        if (modelSwitchingResult.originalModel) {
+          headers["x-ccr-original-model"] = sanitizeHeaderValue(modelSwitchingResult.originalModel);
+        }
+        routeTrace?.capture({
+          changes: [
+            ...modelSwitchingResult.changes,
+            { after: "applied", operation: "add", path: "/headers/x-ccr-model-binding", scope: "headers" },
+            ...(modelSwitchingResult.originalModel ? [
+              { after: modelSwitchingResult.originalModel, operation: "add" as const, path: "/headers/x-ccr-original-model", scope: "headers" as const }
+            ] : [])
+          ],
+          durationMs: Date.now() - modelSwitchingStartedAt,
+          kind: "mutation",
+          name: "model-switching.session-binding",
+          phase: "compatibility",
+          startedAtMs: modelSwitchingStartedAt,
+          target: routedModel ? { model: routedModel } : undefined
+        });
+      }
+
       const modelBeforeRouting = requestLogRequestedModel(bodyToForward ?? requestBody, path);
       const usageAttributionConfig = coreGatewayUsageAttributionConfig(this.config);
       const recordUsage = (input: Omit<UsageCaptureInput, "config">) => {

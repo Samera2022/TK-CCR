@@ -23,6 +23,7 @@ import { isModelAllowedForProfile, profileForApiKey } from "@ccr/core/profiles/m
 import { applyCors, shouldServeGatewayRequest } from "@ccr/core/gateway/core-runtime/supervisor";
 import { billingUsageSyncPath, rawTraceSyncPath } from "@ccr/core/gateway/internal/shared";
 import type { BrowserAutomationMcpIntegration } from "@ccr/core/gateway/internal/shared";
+import { handleCcrEndpoint, isCcrEndpoint } from "@ccr/core/routing/ccr-endpoints-v2";
 
 export type GatewayHttpRequestHandlerDependencies = {
   getBrowserAutomationMcpIntegration: () => BrowserAutomationMcpIntegration | undefined;
@@ -261,6 +262,14 @@ export class GatewayHttpRequestHandler {
       if (claudeCliBootstrapRequest) {
         sendJson(response, 200, createClaudeCliBootstrapResponse(this.config, authorization.apiKey));
         return;
+      }
+
+      // Handle CCR-specific endpoints (model switching, orchestration)
+      if (isCcrEndpoint(path)) {
+        const handled = await handleCcrEndpoint(request, response, path, this.config.Providers);
+        if (handled) {
+          return;
+        }
       }
 
       if (request.method === "POST" && path === "/v1/messages/count_tokens") {
