@@ -148,7 +148,7 @@ export class BudgetTracker {
    */
   getSessionUsage(sessionKey: string): ModelUsage[] {
     const result: ModelUsage[] = [];
-    for (const [key, usage] of this.usageMap) {
+    for (const [_key, usage] of this.usageMap) {
       if (usage.sessionKey === sessionKey) {
         result.push(usage);
       }

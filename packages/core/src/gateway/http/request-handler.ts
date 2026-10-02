@@ -264,10 +264,44 @@ export class GatewayHttpRequestHandler {
         return;
       }
 
+
       // Handle CCR-specific endpoints (model switching, orchestration)
       if (isCcrEndpoint(path)) {
-        const handled = await handleCcrEndpoint(request, response, path, this.config.Providers);
-        if (handled) {
+        // Convert Node.js request to Web API Request
+        const protocol = 'http:';
+        const host = request.headers.host || 'localhost';
+        const requestUrl = `${protocol}//${host}${request.url}`;
+        const webHeaders = new Headers();
+        for (const [key, value] of Object.entries(request.headers)) {
+          if (value) {
+            if (Array.isArray(value)) {
+              for (const v of value) webHeaders.append(key, v);
+            } else {
+              webHeaders.set(key, value);
+            }
+          }
+        }
+        
+        let webRequest: Request;
+        if (request.method === 'POST' || request.method === 'PUT' || request.method === 'PATCH') {
+          const bodyBuffer = await readRequestBody(request);
+          webRequest = new Request(requestUrl, {
+            method: request.method,
+            headers: webHeaders,
+            body: bodyBuffer.toString('utf-8'),
+          });
+        } else {
+          webRequest = new Request(requestUrl, {
+            method: request.method || 'GET',
+            headers: webHeaders,
+          });
+        }
+        
+        const ccrResponse = await handleCcrEndpoint(webRequest, this.config.Providers);
+        if (ccrResponse) {
+          // Write the CCR response
+          response.writeHead(ccrResponse.status, Object.fromEntries(ccrResponse.headers.entries()));
+          response.end(await ccrResponse.text());
           return;
         }
       }
