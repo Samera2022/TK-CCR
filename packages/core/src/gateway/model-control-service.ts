@@ -56,7 +56,12 @@ class ModelControlService {
       return;
     }
 
-    context.sendJson(context.response, 404, {
+    if (root === "budget-confirm" && context.request.method === "POST") {
+      await this.handleBudgetConfirm(context);
+      return;
+    }
+
+        context.sendJson(context.response, 404, {
       error: { message: "Model control endpoint not found." },
     });
   }
@@ -72,6 +77,7 @@ class ModelControlService {
         switch: "POST /__ccr/model-control/v1/switch",
         models: "GET /__ccr/model-control/v1/models",
         budget: "GET /__ccr/model-control/v1/budget/:sessionKey",
+        budgetConfirm: "POST /__ccr/model-control/v1/budget-confirm",
       },
     });
   }
@@ -163,6 +169,77 @@ class ModelControlService {
     };
 
     context.sendJson(context.response, 200, response);
+  }
+
+  private async handleBudgetConfirm(context: ModelControlRequestContext): Promise<void> {
+    let body: { action: string; sessionKey: string; model: string; targetModel?: string };
+    try {
+      const buffer = await context.readBody(context.request);
+      body = JSON.parse(buffer.toString("utf-8"));
+    } catch {
+      context.sendJson(context.response, 400, {
+        error: { message: "Invalid JSON body." },
+      });
+      return;
+    }
+
+    // Validate request
+    if (!body.action || !body.sessionKey || !body.model || !["continue", "switch", "stop"].includes(body.action)) {
+      context.sendJson(context.response, 400, {
+        error: { message: "Invalid action. Must be 'continue', 'switch', or 'stop'. sessionKey and model are required." },
+      });
+      return;
+    }
+
+    if (body.action === "switch" && !body.targetModel) {
+      context.sendJson(context.response, 400, {
+        error: { message: "targetModel is required when action is 'switch'." },
+      });
+      return;
+    }
+
+    const sessionManager = getSessionModelBindingManager();
+    const budgetTracker = getBudgetTracker();
+
+    // Handle the confirmation
+    if (body.action === "continue") {
+      // Continue with current model, no action needed
+      context.sendJson(context.response, 200, {
+        success: true,
+        message: `Continuing with model ${body.model}`,
+        action: "continue",
+      });
+    } else if (body.action === "switch") {
+      // Validate target model exists
+      const targetEntry = findModelCatalogEntry(body.targetModel!);
+      if (!targetEntry) {
+        const availableModels = this.getAvailableModels();
+        context.sendJson(context.response, 404, {
+          success: false,
+          error: "Target model not found",
+          availableModels,
+        });
+        return;
+      }
+
+      // Switch model and reset budget
+      sessionManager.setCurrentModel(body.sessionKey, body.targetModel!);
+      budgetTracker.resetUsage(body.sessionKey, body.targetModel!);
+
+      context.sendJson(context.response, 200, {
+        success: true,
+        message: `Switched from ${body.model} to ${body.targetModel}`,
+        action: "switch",
+        newModel: body.targetModel,
+      });
+    } else if (body.action === "stop") {
+      context.sendJson(context.response, 200, {
+        success: true,
+        message: "Task execution stopped per user request",
+        action: "stop",
+        stopped: true,
+      });
+    }
   }
 
   private getAvailableModels(): ModelInfo[] {
