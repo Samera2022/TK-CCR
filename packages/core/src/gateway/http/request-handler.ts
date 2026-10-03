@@ -14,6 +14,7 @@ import {
   type ContextArchiveReplayExecutor
 } from "@ccr/core/gateway/context-archive";
 import { ccrRemoteControlPathPrefix, ccrRemoteControlService } from "@ccr/core/gateway/remote-control-service";
+import { ccrModelControlPathPrefix, getModelControlService } from "@ccr/core/gateway/model-control-service";
 import { gatewayRuntimeConfigControlPath } from "@ccr/core/gateway/runtime-config-control";
 import { authorize, claudeCodeWifTokenPath, handleClaudeCodeWifTokenRequest, reserveApiKeyLimits } from "@ccr/core/gateway/auth/api-key-authorizer";
 import { parseJsonObject, readRequestBody, sendJson } from "@ccr/core/gateway/http/io";
@@ -137,6 +138,23 @@ export class GatewayHttpRequestHandler {
         return;
       }
 
+
+      if (path === ccrModelControlPathPrefix || path.startsWith(`${ccrModelControlPathPrefix}/`)) {
+        const authorization = await authorize(request, response, this.config);
+        if (!authorization.ok) {
+          return;
+        }
+        const modelControlService = getModelControlService();
+        await modelControlService.handleRequest({
+          endpoint: this.status.endpoint,
+          path,
+          readBody: readRequestBody,
+          request,
+          response,
+          sendJson
+        });
+        return;
+      }
       if (path === BROWSER_AUTOMATION_MCP_PATH || path === `${BROWSER_AUTOMATION_MCP_PATH}/`) {
         if (!browserAutomationMcpEnabled(this.config)) {
           sendJson(response, 404, {
