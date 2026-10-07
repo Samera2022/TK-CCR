@@ -150,6 +150,7 @@ export class RawTraceSynchronizer {
   private storageReady = false;
   private sourceScanGeneration = 0;
   private readonly sourceObservations = new Map<string, RawTraceSourceObservation>();
+  private sourceBundleMutation = Promise.resolve();
   private storageMutation = Promise.resolve();
 
   constructor(private readonly dependencies: RawTraceSynchronizerDependencies) {}
@@ -206,12 +207,12 @@ export class RawTraceSynchronizer {
     }
     let stored: StoredRawTraceBundle;
     try {
-      stored = await persistRawTraceBundle(
+      stored = await this.withSourceBundleMutation(() => persistRawTraceBundle(
         manifest,
         spoolDirectory,
         this.dependencies.syncPartFile,
         this.dependencies.measureDirectorySize
-      );
+      ));
     } catch (error) {
       console.warn(`[gateway] Failed to durably accept raw trace bundle: ${formatError(error)}`);
       sendJson(response, 503, { accepted: false, ok: false, reason: "spool_unavailable" });
@@ -606,12 +607,12 @@ export class RawTraceSynchronizer {
           }
           continue;
         }
-        const stored = await persistRawTraceBundle(
+        const stored = await this.withSourceBundleMutation(() => persistRawTraceBundle(
           manifest,
           this.spoolDirectory(),
           this.dependencies.syncPartFile,
           this.dependencies.measureDirectorySize
-        );
+        ));
         this.sourceObservations.delete(directory);
         await this.registerStoredBundle(stored);
       } catch (error) {
@@ -807,6 +808,20 @@ export class RawTraceSynchronizer {
     const previous = this.storageMutation;
     let release = () => {};
     this.storageMutation = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
+  }
+
+  private async withSourceBundleMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.sourceBundleMutation;
+    let release = () => {};
+    this.sourceBundleMutation = new Promise<void>((resolve) => {
       release = resolve;
     });
     await previous;

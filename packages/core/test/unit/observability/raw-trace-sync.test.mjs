@@ -253,6 +253,54 @@ test("raw trace sync acknowledges only after durable inbox ownership and retains
   }
 });
 
+test("raw trace serializes concurrent adoption of the same source bundle", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "ccr-raw-trace-concurrent-adoption-test-"));
+  const spoolDirectory = path.join(dir, "spool");
+  const bundleDirectory = path.join(spoolDirectory, "bundle");
+  const bodyFile = path.join(bundleDirectory, "upstream_request.json");
+  mkdirSync(bundleDirectory, { recursive: true });
+  writeFileSync(bodyFile, '{"message":"adopt once"}');
+  let releaseSync;
+  const syncGate = new Promise((resolve) => {
+    releaseSync = resolve;
+  });
+  let syncCalls = 0;
+  const synchronizer = new RawTraceSynchronizer({
+    enqueueUpdate: async () => ({ accepted: false, degraded: false, reason: "record_pending" }),
+    getConfig: createConfig,
+    spoolDirectory,
+    syncPartFile: async () => {
+      syncCalls += 1;
+      if (syncCalls === 1) await syncGate;
+    }
+  });
+  const manifest = {
+    parts: [{
+      contentType: "application/json",
+      filePath: bodyFile,
+      originalBytes: 24,
+      partType: "upstream_request"
+    }],
+    requestId: "concurrent-source-adoption",
+    turnKey: "concurrent-source-adoption-turn"
+  };
+
+  try {
+    const first = sendRawTrace(synchronizer, manifest);
+    await waitFor(() => syncCalls === 1);
+    const second = sendRawTrace(synchronizer, manifest);
+    releaseSync();
+    const results = await Promise.all([first, second]);
+    assert.deepEqual(results.map((result) => result.statusCode).sort(), [202, 202]);
+    assert.equal(readdirSync(path.join(spoolDirectory, ".ccr-inbox")).length, 1);
+    assert.equal(existsSync(bundleDirectory), false);
+  } finally {
+    releaseSync?.();
+    await synchronizer.stop();
+    rmSync(dir, { force: true, recursive: true });
+  }
+});
+
 test("raw trace sync acknowledges and cleans bundles for terminally dropped records", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "ccr-raw-trace-sync-record-dropped-test-"));
   const spoolDirectory = path.join(dir, "spool");
