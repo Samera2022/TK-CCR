@@ -4,6 +4,7 @@ import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSyn
 import { builtinModules, createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { patchInstalledAiGateway } from "./patch-ai-gateway.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const requireFromHere = createRequire(import.meta.url);
@@ -29,6 +30,7 @@ export const coreMainOutDir = path.join(coreDistDir, "main");
 export const electronMainOutDir = path.join(electronDistDir, "main");
 export const mainOutDir = electronMainOutDir;
 export const gatewayPackageRoot = resolveGatewayPackageRoot();
+patchInstalledAiGateway(gatewayPackageRoot);
 export const gatewayRuntimeInput = resolveGatewayRuntimeInput(gatewayPackageRoot);
 export const electronGatewayRuntimeOutput = path.join(electronMainOutDir, "next-ai-gateway.js");
 export const botGatewaySdkPackageRoot = path.dirname(requireFromHere.resolve("@the-next-ai/bot-gateway-sdk/package.json"));
