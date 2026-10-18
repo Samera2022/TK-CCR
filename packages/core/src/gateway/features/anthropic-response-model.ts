@@ -2,6 +2,7 @@ import { Readable, Transform } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import type { GatewayProviderProtocol } from "@ccr/core/contracts/app";
 import { isRecord, stringValue } from "@ccr/core/gateway/internal/value";
+import { pipeWithUpstreamErrorForwarding } from "@ccr/core/gateway/internal/stream-errors";
 
 export function shouldRewriteAnthropicMessageStartModel(input: {
   contentType: string | undefined;
@@ -24,7 +25,7 @@ export function rewriteAnthropicMessageStartModelStream(
 
   const decoder = new StringDecoder("utf8");
   let pending = "";
-  return input.pipe(new Transform({
+  return pipeWithUpstreamErrorForwarding(input, new Transform({
     transform(chunk, _encoding, callback) {
       pending += decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       pending = drainAnthropicSseBlocks(this, pending, replacementModel, false);

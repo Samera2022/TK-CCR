@@ -46,6 +46,7 @@ import {
   type CcrRouterPluginRouteRequest
 } from "@ccr/core/gateway/core-runtime/router-plugin-contract";
 import { coreGatewayAuthHeader, rawTraceSyncHeader, rawTraceSyncPath, sdkCompatibleTokenHeaderNames } from "@ccr/core/gateway/internal/shared";
+import { pipeWithUpstreamErrorForwarding } from "@ccr/core/gateway/internal/stream-errors";
 import { gatewayRuntimeConfigControlPath, gatewayRuntimeConfigRevision } from "@ccr/core/gateway/runtime-config-control";
 import {
   createClaudeCliBootstrapResponse,
@@ -640,7 +641,7 @@ function applyLiveTokenRateStreamTransform(
   const source = Readable.fromWeb(
     streamInput.upstreamResponse.body as unknown as Parameters<typeof Readable.fromWeb>[0]
   );
-  const metered = source.pipe(meter.stream);
+  const metered = pipeWithUpstreamErrorForwarding(source, meter.stream);
   return new Response(Readable.toWeb(metered) as ReadableStream<Uint8Array>, {
     headers: new Headers(streamInput.upstreamResponse.headers),
     status: streamInput.upstreamResponse.status,
@@ -978,7 +979,8 @@ function applyCodexBridgeStreamTransform(streamInput: GatewayStreamHookInput): R
   const headers = new Headers(streamInput.upstreamResponse.headers);
   headers.delete("content-encoding");
   headers.delete("content-length");
-  let stream = Readable.fromWeb(streamInput.upstreamResponse.body as unknown as Parameters<typeof Readable.fromWeb>[0]);
+  const source = Readable.fromWeb(streamInput.upstreamResponse.body as unknown as Parameters<typeof Readable.fromWeb>[0]);
+  let stream = source;
   if (bridge.applyPatch) {
     stream = codexApplyPatchBridgeResponseStream(stream, headers);
   }

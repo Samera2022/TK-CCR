@@ -3,6 +3,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from "node:http";
 import { Readable, Transform } from "node:stream";
 import { CONTEXT_ARCHIVE_DB_FILE } from "@ccr/core/config/constants";
+import { pipeWithUpstreamErrorForwarding } from "@ccr/core/gateway/internal/stream-errors";
 import type {
   ApiKeyConfig,
   AppConfig,
@@ -554,7 +555,7 @@ export function contextArchiveHandoffResponseStream(
   responseMode: ContextArchiveResponseMode = "default"
 ): Readable {
   const chunks: Buffer[] = [];
-  return input.pipe(new Transform({
+  return pipeWithUpstreamErrorForwarding(input, new Transform({
     transform(chunk, _encoding, callback) {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       callback();
@@ -580,7 +581,7 @@ export function codexCompactResponseStream(
   responseMode: ContextArchiveResponseMode
 ): Readable {
   const chunks: Buffer[] = [];
-  return input.pipe(new Transform({
+  return pipeWithUpstreamErrorForwarding(input, new Transform({
     transform(chunk, _encoding, callback) {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       callback();

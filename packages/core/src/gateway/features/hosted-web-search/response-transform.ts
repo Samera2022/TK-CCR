@@ -3,6 +3,7 @@ import { StringDecoder } from "node:string_decoder";
 import type { GatewayProviderProtocol } from "@ccr/core/contracts/app";
 import { isRecord, numberValue, stringValue } from "@ccr/core/gateway/internal/value";
 import { formatError } from "@ccr/core/gateway/http/io";
+import { pipeWithUpstreamErrorForwarding } from "@ccr/core/gateway/internal/stream-errors";
 import type { BrowserWebSearchMcpIntegration, BrowserWebSearchProtocolRecord, HostedWebSearchProtocolContext } from "@ccr/core/gateway/internal/shared";
 import { selectHostedWebSearchProtocolRecords } from "@ccr/core/gateway/features/hosted-web-search/discovery";
 import { parseSseEventBlock, parseSseEvents, serializeSseEvent, shiftSseContentBlockIndex, sseEventFromValue } from "@ccr/core/gateway/features/hosted-web-search/sse";
@@ -31,7 +32,7 @@ export function hostedWebSearchProtocolResponseStream(
   }
 
   const chunks: Buffer[] = [];
-  return input.pipe(new Transform({
+  return pipeWithUpstreamErrorForwarding(input, new Transform({
     transform(chunk, _encoding, callback) {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       callback();
@@ -84,7 +85,7 @@ function hostedWebSearchProtocolSseStream(
     passThrough = records.length === 0;
   }
 
-  return input.pipe(new Transform({
+  return pipeWithUpstreamErrorForwarding(input, new Transform({
     transform(chunk, _encoding, callback) {
       const text = decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       const rawText = pending + text;
@@ -288,7 +289,7 @@ function anthropicHostedWebSearchProtocolSseStream(
     passThrough = records.length === 0;
   }
 
-  return input.pipe(new Transform({
+  return pipeWithUpstreamErrorForwarding(input, new Transform({
     transform(chunk, _encoding, callback) {
       const text = decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       const rawText = pending + text;

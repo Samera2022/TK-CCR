@@ -1,6 +1,7 @@
 import type { IncomingHttpHeaders } from "node:http";
 import { Readable, Transform } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
+import { pipeWithUpstreamErrorForwarding } from "@ccr/core/gateway/internal/stream-errors";
 import type { AppConfig } from "@ccr/core/contracts/app";
 import { normalizeRouteSelector } from "@ccr/core/routing/model-registry";
 import { isRecord, rawStringValue, stringValue } from "@ccr/core/gateway/internal/value";
@@ -245,7 +246,7 @@ function nativeMultiAgentToolName(name: string): string | undefined {
 export function codexMultiAgentBridgeResponseStream(input: Readable, headers: Headers): Readable {
   const contentType = headers.get("content-type")?.toLowerCase() ?? "";
   if (contentType.includes("text/event-stream")) {
-    return input.pipe(new Transform({
+    return pipeWithUpstreamErrorForwarding(input, new Transform({
       transform(chunk, _encoding, callback) {
         transformSseChunk(this, chunk);
         callback();
@@ -258,7 +259,7 @@ export function codexMultiAgentBridgeResponseStream(input: Readable, headers: He
   }
   if (contentType.includes("application/json")) {
     const chunks: Buffer[] = [];
-    return input.pipe(new Transform({
+    return pipeWithUpstreamErrorForwarding(input, new Transform({
       transform(chunk, _encoding, callback) {
         chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         callback();
