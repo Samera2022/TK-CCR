@@ -1115,6 +1115,15 @@ function extractUsageFromBody(text: string): UsageSnapshot | undefined {
   return merged;
 }
 
+export function extractUsageForBudget(text: string): { inputTokens: number; outputTokens: number; model?: string } | undefined {
+  const snapshot = extractUsageFromBody(text);
+  if (!snapshot) return undefined;
+  const inputTokens = snapshot.inputTokens ?? 0;
+  const outputTokens = snapshot.outputTokens ?? 0;
+  if (inputTokens <= 0 && outputTokens <= 0) return undefined;
+  return { inputTokens, outputTokens, ...(snapshot.model ? { model: snapshot.model } : {}) };
+}
+
 function parseStreamPayloads(text: string): unknown[] {
   const payloads: unknown[] = [];
   for (const rawLine of text.split(/\r?\n/)) {

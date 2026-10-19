@@ -8,6 +8,8 @@ import {
   resolveApiKeyFromHeaders
 } from "@ccr/core/gateway/auth/api-key-authorizer";
 import { ccrRemoteControlPathPrefix, ccrRemoteControlService } from "@ccr/core/gateway/remote-control-service";
+import { ccrModelControlPathPrefix, getModelControlService } from "@ccr/core/gateway/model-control-service";
+import { ccrOrchestraPathPrefix, getOrchestraService } from "@ccr/core/gateway/orchestra-service";
 import { historyPathPrefix, historyService } from "@ccr/core/gateway/history/service";
 import { continuityPathPrefix, ContinuityService } from "@ccr/core/gateway/continuity";
 import { normalizeGatewayErrorPayload, rectifyUpstreamError } from "@ccr/core/gateway/rectifier/error-rectifier";
@@ -340,6 +342,38 @@ export async function createGatewayPlugin(input: GatewayPluginFactoryInput = {})
       priority: "pre",
       handler: async ({ request, reply }: { request: GatewayPluginHttpRequest; reply: GatewayPluginHttpReply }) =>
         handleContinuityRoute(config, request, reply, coreAuthToken, publicAuthKeys)
+    }, {
+      auth: "gateway",
+      key: "ccr-public-model-control-root",
+      method: "ALL",
+      path: ccrModelControlPathPrefix,
+      priority: "pre",
+      handler: async ({ request, reply }: { request: GatewayPluginHttpRequest; reply: GatewayPluginHttpReply }) =>
+        handleModelControlRoute(config, request, reply)
+    }, {
+      auth: "gateway",
+      key: "ccr-public-model-control",
+      method: "ALL",
+      path: `${ccrModelControlPathPrefix}/*`,
+      priority: "pre",
+      handler: async ({ request, reply }: { request: GatewayPluginHttpRequest; reply: GatewayPluginHttpReply }) =>
+        handleModelControlRoute(config, request, reply)
+    }, {
+      auth: "gateway",
+      key: "ccr-public-orchestra-root",
+      method: "ALL",
+      path: ccrOrchestraPathPrefix,
+      priority: "pre",
+      handler: async ({ request, reply }: { request: GatewayPluginHttpRequest; reply: GatewayPluginHttpReply }) =>
+        handleOrchestraRoute(config, request, reply)
+    }, {
+      auth: "gateway",
+      key: "ccr-public-orchestra",
+      method: "ALL",
+      path: `${ccrOrchestraPathPrefix}/*`,
+      priority: "pre",
+      handler: async ({ request, reply }: { request: GatewayPluginHttpRequest; reply: GatewayPluginHttpReply }) =>
+        handleOrchestraRoute(config, request, reply)
     }, {
       auth: "none",
       key: "ccr-public-integrations-root",
@@ -1396,6 +1430,54 @@ function readAppConfig(value: unknown): AppConfig | undefined {
   return isRecord(value) && isRecord(value.appConfig)
     ? value.appConfig as AppConfig
     : undefined;
+}
+
+async function handleModelControlRoute(
+  config: AppConfig,
+  request: GatewayPluginHttpRequest,
+  reply: GatewayPluginHttpReply,
+): Promise<unknown> {
+  const serviceRequest = request.raw ?? ({
+    headers: request.headers ?? {},
+    method: request.method ?? "GET",
+  } as IncomingMessage);
+  const path = requestPath(request.url ?? "").split("?", 1)[0] || "/";
+  await getModelControlService().handleRequest({
+    endpoint: request.url ?? "",
+    path,
+    providers: config.Providers,
+    defaultReasoningEffort: config.reasoning?.defaultEffort,
+    readBody: async () => httpRequestBodyBuffer(request.body),
+    request: serviceRequest,
+    response: reply.raw ?? ({} as ServerResponse),
+    sendJson: (_response, statusCode, payload) => {
+      reply.code(statusCode).send(payload);
+    },
+  });
+  return undefined;
+}
+
+async function handleOrchestraRoute(
+  config: AppConfig,
+  request: GatewayPluginHttpRequest,
+  reply: GatewayPluginHttpReply,
+): Promise<unknown> {
+  const serviceRequest = request.raw ?? ({
+    headers: request.headers ?? {},
+    method: request.method ?? "GET",
+  } as IncomingMessage);
+  const path = requestPath(request.url ?? "").split("?", 1)[0] || "/";
+  await getOrchestraService(config.orchestra).handleRequest({
+    endpoint: request.url ?? "",
+    path,
+    readBody: async () => httpRequestBodyBuffer(request.body),
+    request: serviceRequest,
+    response: reply.raw ?? ({} as ServerResponse),
+    sendJson: (_response, statusCode, payload) => {
+      reply.code(statusCode).send(payload);
+    },
+  });
+  return undefined;
 }
 
 function readPublicGatewayMode(value: unknown): boolean {

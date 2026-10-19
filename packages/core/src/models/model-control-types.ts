@@ -4,6 +4,7 @@
 
 import type { ModelCatalogEntry } from "@ccr/core/gateway/model-catalog";
 import type { BudgetState, BudgetConfirmationRequest, BudgetConfirmationResponse } from "./budget-config";
+import type { ReasoningEffortLevel } from "./reasoning-config";
 
 // Model switching request/response types
 
@@ -11,6 +12,29 @@ export interface ModelSwitchRequest {
   sessionKey: string;
   targetModel: string;
   reason: string;
+}
+
+export interface BudgetConfirmRequest {
+  action: "continue" | "switch" | "stop";
+  sessionKey: string;
+  model: string;
+  targetModel?: string;
+  reason?: string;
+}
+
+export interface ReasoningEffortRequest {
+  sessionKey: string;
+  /** A level such as `high`, or `reset` to inherit the configured default. */
+  effort: ReasoningEffortLevel | "reset" | string;
+  reason?: string;
+}
+
+export interface ReasoningEffortResponse {
+  success: boolean;
+  sessionKey: string;
+  effort: ReasoningEffortLevel;
+  previousEffort?: ReasoningEffortLevel;
+  levels: readonly ReasoningEffortLevel[];
 }
 
 export interface ModelSwitchSuccessResponse {
@@ -32,6 +56,7 @@ export type ModelSwitchResponse = ModelSwitchSuccessResponse | ModelSwitchErrorR
 
 export interface ModelInfo {
   id: string;
+  selector?: string;
   displayName: string;
   provider?: string;
   capabilities?: Record<string, unknown>;

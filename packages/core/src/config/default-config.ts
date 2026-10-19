@@ -9,6 +9,39 @@ import {
 } from "@ccr/core/contracts/app";
 import { defaultRequestLogBodyBytes } from "@ccr/core/observability/request-log-limits";
 
+const DEFAULT_ORCHESTRA_ROLES = [
+  {
+    name: "cost-effective-primary",
+    model: "deepseek-v4.1-flash",
+    systemPrompt: "Read source material, organize hypotheses, write experiment code, and produce initial derivations. Prefer concise, evidence-backed progress.",
+    triggers: ["read", "summarize", "hypothesis", "experiment", "prototype", "原文", "假设", "实验", "初步推导"]
+  },
+  {
+    name: "structured-drafter",
+    model: "glm-5.3-flash",
+    systemPrompt: "整理大量资料，提取结构化信息，并起草代码和文档初稿。",
+    triggers: ["整理", "提取", "结构化", "draft", "documentation", "资料", "文档初稿"]
+  },
+  {
+    name: "second-opinion",
+    model: "glm-5.3",
+    systemPrompt: "提供第二意见，分析文献材料，并处理工具型任务。指出不确定性和相反证据。",
+    triggers: ["second opinion", "review", "literature", "文献", "第二意见", "工具型"]
+  },
+  {
+    name: "openai-reasoning",
+    model: "gpt-6-sol",
+    systemPrompt: "在 OpenAI 体系内完成需要更强推理但范围仍可控的任务；先明确问题边界，再给出可验证结论。",
+    triggers: ["reasoning", "architecture", "design", "推理", "架构", "设计"]
+  },
+  {
+    name: "high-value-hard-problem",
+    model: "gpt-6-astra",
+    systemPrompt: "只处理高价值、范围明确且需要深度推理的难题；先验证任务值得使用高成本模型。",
+    triggers: ["hard problem", "deep reasoning", "critical", "高价值", "明确范围", "难题"]
+  }
+];
+
 export const DEFAULT_PROXY_TARGETS: ProxyRouteTarget[] = [
   { host: "api.anthropic.com", paths: ["/v1/messages", "/v1/messages/count_tokens"] },
   { host: "api.openai.com", paths: ["/v1/chat/completions", "/v1/responses", "/v1/models"] },
@@ -120,6 +153,21 @@ export function createDefaultAppConfig(options: DefaultAppConfigOptions = {}): A
       jobTimeoutMs: 600000,
       maxImageConcurrency: 2,
       maxVideoConcurrency: 1
+    },
+    modelBudget: {
+      defaultBudget: 1_000_000,
+      warningThreshold: 90,
+      models: {}
+    },
+    orchestra: {
+      enabled: false,
+      defaultOrchestratorModel: "gpt-6-sol",
+      roles: DEFAULT_ORCHESTRA_ROLES.map((role) => ({ ...role }))
+    },
+    reasoning: {
+      enabled: true,
+      defaultEffort: "",
+      models: {}
     },
     launchAtLogin: false,
     observability: {

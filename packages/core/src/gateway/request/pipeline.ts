@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
-import type { ApiKeyConfig, AppConfig, ProfileConfig, RequestRouteTraceChange, RequestStreamMetrics, RouterFallbackConfig } from "@ccr/core/contracts/app";
+import type { ApiKeyConfig, AppConfig, GatewayProviderConfig, ProfileConfig, RequestRouteTraceChange, RequestStreamMetrics, RouterFallbackConfig } from "@ccr/core/contracts/app";
 import {
   createSseErrorDetector,
   markGatewayRequestLogDropped,
   recordGatewayRequestLog
 } from "@ccr/core/observability/request-log-store";
 import { requestLogRequestedModel, requestLogResponseModel } from "@ccr/core/observability/request-log-model";
-import { recordGatewayUsageCapture, type UsageCaptureInput } from "@ccr/core/usage/store";
+import { extractUsageForBudget, recordGatewayUsageCapture, type UsageCaptureInput } from "@ccr/core/usage/store";
 import { ClaudeCodeRouterPlugin, type ClaudeCodeRouteDecision } from "@ccr/core/gateway/claude-code-router-plugin";
 import {
   codexCompactResponseStream,
@@ -37,11 +37,13 @@ import { filteredResponseHeaders, formatError, formatUpstreamErrorForLog, forwar
 import { appendAggregateErrorAttemptSummary, shouldBufferAggregateErrorBody } from "@ccr/core/gateway/http/error-detail";
 import { parseJsonObjectSafe, serializeJsonBody, takeJsonObject } from "@ccr/core/gateway/http/body";
 import { createGatewayModelsResponse, prepareClaudeAppDiscoveredModelRequest, prepareClaudeCodeDiscoveredModelRequest, shouldServeGatewayModelsResponse } from "@ccr/core/gateway/features/model-discovery";
-import { providerProtocolForClientProtocol, resolveProviderLogName, resolveResponseProviderProtocol, sanitizeHeaderValue } from "@ccr/core/providers/runtime-topology";
+import { findProviderByPublicOrInternalName, providerProtocolForClientProtocol, resolveProviderLogName, resolveResponseProviderProtocol, sanitizeHeaderValue } from "@ccr/core/providers/runtime-topology";
 import { createBodySampler, requestLogSampled, shouldRecordRequestLogs } from "@ccr/core/observability/raw-trace-sync";
 import { RequestRouteTraceRecorder } from "@ccr/core/observability/route-trace";
 import { coreGatewayUsageAttributionConfig } from "@ccr/core/gateway/core-runtime/config-compiler";
 import { providerModelPricingForUsage } from "@ccr/core/models/pricing-service";
+import { getBudgetTracker } from "@ccr/core/gateway/features/budget-tracker";
+import { getOrchestraEngine } from "@ccr/core/gateway/features/orchestra-engine-v2";
 import { fetchWithSystemProxy } from "@ccr/core/proxy/system-proxy-fetch";
 import { clientClosedRequestStatusCode, clientDisconnectMessage, coreGatewayAuthHeader, resolveStreamRequestLogOutcome, UpstreamRequestError } from "@ccr/core/gateway/internal/shared";
 import type { BrowserWebSearchMcpIntegration, BrowserWebSearchProtocolRecord, UpstreamFetchResult } from "@ccr/core/gateway/internal/shared";
@@ -63,6 +65,13 @@ import {
 import { isRecord } from "@ccr/core/gateway/internal/value";
 import { combineStreamExperienceMetrics, createStreamExperienceMeter, monotonicNowMs } from "@ccr/core/observability/stream-experience";
 import { applySessionModelBinding } from "@ccr/core/gateway/features/model-switching";
+import {
+  applyReasoningEffort,
+  ccrReasoningEffortHeader,
+  ccrReasoningSourceHeader,
+  resolveReasoningEffort
+} from "@ccr/core/gateway/features/reasoning-effort";
+import { modelCatalogReasoningEffortConfig, findProviderModelCatalogEntry } from "@ccr/core/gateway/model-catalog";
 
 export type GatewayRequestPipelineDependencies = {
   getBrowserWebSearchMcpIntegration: () => BrowserWebSearchMcpIntegration | undefined;
@@ -254,6 +263,24 @@ export class GatewayRequestPipeline {
         });
       }
 
+      if (this.config.orchestra?.enabled) {
+        const taskDescription = extractOrchestraTask(bodyToForward);
+        const originalModel = requestLogRequestedModel(bodyToForward ?? requestBody, path) ?? "";
+        if (taskDescription && originalModel) {
+          const orchestraResult = await getOrchestraEngine().handleRequest(
+            budgetSessionKey(client ?? "default", request),
+            taskDescription,
+            originalModel
+          );
+          if (isConfiguredModel(this.config, orchestraResult.model)) {
+            routedModel = orchestraResult.model;
+            bodyToForward = applyOrchestraSystemPrompt(bodyToForward, orchestraResult.systemPrompt);
+          } else {
+            headers["x-ccr-orchestra-fallback"] = "role-model-unavailable";
+          }
+        }
+      }
+
       // Apply session model binding if one exists
       const modelSwitchingStartedAt = Date.now();
       const modelSwitchingResult = applySessionModelBinding(headers, bodyToForward.toString());
@@ -284,6 +311,12 @@ export class GatewayRequestPipeline {
       const modelBeforeRouting = requestLogRequestedModel(bodyToForward ?? requestBody, path);
       const usageAttributionConfig = coreGatewayUsageAttributionConfig(this.config);
       const recordUsage = (input: Omit<UsageCaptureInput, "config">) => {
+        const usage = extractUsageForBudget(input.bodyText);
+        const sessionKey = budgetSessionKey(input.client ?? client ?? "default", request, routedSessionId);
+        const model = input.fallbackModel ?? usage?.model;
+        if (model && usage && (usage.inputTokens > 0 || usage.outputTokens > 0)) {
+          getBudgetTracker().recordUsage(sessionKey, model, usage.inputTokens, usage.outputTokens);
+        }
         void recordGatewayUsageCapture({ ...input, config: usageAttributionConfig });
       };
       const upstreamAbortController = new AbortController();
@@ -463,6 +496,65 @@ export class GatewayRequestPipeline {
           error: {
             code: "profile_model_not_allowed",
             message: `Model "${deniedModel}" is not allowed for this profile.`
+          }
+        });
+        return;
+      }
+      const reasoningStartedAt = Date.now();
+      const reasoningResolution = resolveReasoningEffort({
+        body: bodyToForward?.toString("utf8") ?? "",
+        client,
+        config: this.config.reasoning,
+        headers,
+        model: effectiveModel,
+        sessionId: routedSessionId
+      });
+      if (reasoningResolution) {
+        const reasoningProtocol = requestProtocolForPath(path) ??
+          (isCodexResponsesCompactPath(path) ? "openai_responses" : undefined);
+        const routedProvider = routedModel ? findProviderForRoutedModel(this.config, routedModel) : undefined;
+        const reasoningResult = applyReasoningEffort({
+          body: bodyToForward?.toString("utf8") ?? "",
+          effort: reasoningResolution.effort,
+          protocol: reasoningProtocol,
+          supportedLevels: modelCatalogReasoningEffortConfig(
+            findProviderModelCatalogEntry(routedProvider, effectiveModel),
+            routedProvider?.name ?? ""
+          ).efforts
+        });
+        if (reasoningResult.applied && bodyToForward) {
+          bodyToForward = Buffer.from(reasoningResult.body);
+          headers[ccrReasoningEffortHeader] = reasoningResult.effort ?? reasoningResolution.effort;
+          headers[ccrReasoningSourceHeader] = reasoningResolution.source;
+          pluginResponseHeaders.set(ccrReasoningEffortHeader, headers[ccrReasoningEffortHeader]);
+          pluginResponseHeaders.set(ccrReasoningSourceHeader, reasoningResolution.source);
+          routeTrace?.capture({
+            changes: [
+              ...reasoningResult.changes,
+              { after: headers[ccrReasoningEffortHeader], operation: "add", path: `/headers/${ccrReasoningEffortHeader}`, scope: "headers" },
+              { after: headers[ccrReasoningSourceHeader], operation: "add", path: `/headers/${ccrReasoningSourceHeader}`, scope: "headers" }
+            ],
+            durationMs: Date.now() - reasoningStartedAt,
+            kind: "mutation",
+            name: "reasoning.effort",
+            phase: "compatibility",
+            startedAtMs: reasoningStartedAt,
+            target: effectiveModel ? { model: effectiveModel } : undefined
+          });
+        }
+      }
+      const budgetTracker = getBudgetTracker();
+      const budgetSession = budgetSessionKey(client ?? "default", request, routedSessionId);
+      const budgetState = effectiveModel ? budgetTracker.getBudgetState(budgetSession, effectiveModel) : undefined;
+      if (effectiveModel && budgetState && budgetState.used >= budgetState.budget &&
+        !budgetTracker.isOverBudgetAllowed(budgetSession, effectiveModel) &&
+        !budgetTracker.hasPendingConfirmation(budgetSession, effectiveModel)) {
+        const confirmation = budgetTracker.createConfirmationRequest(budgetSession, effectiveModel, path);
+        sendJson(response, 409, {
+          error: {
+            code: "ccr_budget_confirmation_required",
+            message: `Budget exceeded for model "${effectiveModel}". Confirm whether the task should continue, switch models, or stop.`,
+            confirmation
           }
         });
         return;
@@ -1350,3 +1442,100 @@ function profileAllowedRouteFallback(
 
 export const profileDeniedModelForTest = profileDeniedModel;
 export const profileAllowedRouteFallbackForTest = profileAllowedRouteFallback;
+
+function budgetSessionKey(client: string, request: IncomingMessage, routedSessionId?: string): string {
+  const headerValue = request.headers["x-ccr-session-id"];
+  const headerSession = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  const sessionId = (headerSession || routedSessionId || "default").trim();
+  return `${client}:${sessionId || "default"}`;
+}
+
+function isConfiguredModel(config: AppConfig, model: string): boolean {
+  const normalized = model.trim();
+  if (!normalized) return false;
+  const configuredModels = config.Providers
+    .filter((provider) => provider.enabled !== false)
+    .flatMap((provider) => provider.models ?? [])
+    .map((candidate) => candidate.trim())
+    .filter(Boolean);
+  if (configuredModels.length === 0) return true;
+  return configuredModels.some((candidate) =>
+    candidate === normalized || candidate.split("/").pop() === normalized.split("/").pop()
+  );
+}
+
+function findProviderForRoutedModel(config: AppConfig, model: string): GatewayProviderConfig | undefined {
+  const normalized = model.trim();
+  if (!normalized) {
+    return undefined;
+  }
+  const [selectorProvider, selectorModel] = normalized.includes("/")
+    ? [normalized.slice(0, normalized.indexOf("/")), normalized.slice(normalized.indexOf("/") + 1)]
+    : [undefined, normalized];
+  const namedProvider = selectorProvider
+    ? findProviderByPublicOrInternalName(config, selectorProvider)
+    : undefined;
+  if (namedProvider) {
+    return namedProvider;
+  }
+  return config.Providers.find((provider) =>
+    provider.enabled !== false &&
+    (provider.models ?? []).some((candidate) =>
+      candidate.trim() === selectorModel || candidate.trim().split("/").pop() === selectorModel
+    )
+  );
+}
+
+function extractOrchestraTask(body: Buffer | undefined): string | undefined {
+  if (!body) return undefined;
+  try {
+    const parsed = JSON.parse(body.toString("utf8")) as Record<string, unknown>;
+    const messages = Array.isArray(parsed.messages) ? parsed.messages : [];
+    const lastUser = [...messages].reverse().find((item) => {
+      if (!item || typeof item !== "object") return false;
+      return (item as Record<string, unknown>).role === "user";
+    }) as Record<string, unknown> | undefined;
+    const content = lastUser?.content ?? parsed.prompt ?? parsed.input;
+    if (typeof content === "string") return content.trim() || undefined;
+    if (Array.isArray(content)) {
+      const text = content
+        .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+        .map((item) => typeof item.text === "string" ? item.text : "")
+        .filter(Boolean)
+        .join("\n")
+        .trim();
+      return text || undefined;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+function applyOrchestraSystemPrompt(body: Buffer, systemPrompt: string): Buffer {
+  if (!systemPrompt.trim()) return body;
+  try {
+    const parsed = JSON.parse(body.toString("utf8")) as Record<string, unknown>;
+    const prompt = systemPrompt.trim();
+    if (typeof parsed.instructions === "string") {
+      parsed.instructions = `${prompt}\n\n${parsed.instructions}`;
+    } else if (Array.isArray(parsed.messages)) {
+      const messages = parsed.messages as Array<Record<string, unknown>>;
+      const systemMessage = messages.find((message) => message?.role === "system");
+      if (systemMessage) {
+        systemMessage.content = `${prompt}\n\n${typeof systemMessage.content === "string" ? systemMessage.content : ""}`.trim();
+      } else {
+        messages.unshift({ role: "system", content: prompt });
+      }
+    } else if (typeof parsed.system === "string") {
+      parsed.system = `${prompt}\n\n${parsed.system}`;
+    } else if (typeof parsed.prompt === "string") {
+      parsed.prompt = `${prompt}\n\n${parsed.prompt}`;
+    } else {
+      parsed.instructions = prompt;
+    }
+    return Buffer.from(JSON.stringify(parsed));
+  } catch {
+    return body;
+  }
+}

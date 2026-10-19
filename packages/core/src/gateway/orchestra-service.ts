@@ -3,8 +3,9 @@
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { OrchestraConfig, Role, RoleSelection } from "@ccr/core/models/orchestra-config";
-import { getSessionModelBindingManager } from "@ccr/core/gateway/session-model-binding";
+import type { GatewayProviderConfig } from "@ccr/core/contracts/app";
+import type { OrchestraConfig, Role } from "@ccr/core/models/orchestra-config";
+import { getOrchestraEngine } from "@ccr/core/gateway/features/orchestra-engine-v2";
 
 export const ccrOrchestraPathPrefix = "/__ccr/orchestra/v1";
 
@@ -12,6 +13,7 @@ export type OrchestraRequestContext = {
   endpoint: string;
   path: string;
   readBody: (request: IncomingMessage) => Promise<Buffer>;
+  providers?: GatewayProviderConfig[];
   request: IncomingMessage;
   response: ServerResponse;
   sendJson: (response: ServerResponse, statusCode: number, payload: unknown) => void;
@@ -38,6 +40,7 @@ class OrchestraService {
 
   updateConfig(config: OrchestraConfig): void {
     this.config = config;
+    getOrchestraEngine().updateConfig(config);
   }
 
   getConfig(): OrchestraConfig {
@@ -118,97 +121,38 @@ class OrchestraService {
       return;
     }
 
-    // Select role based on task description
-    const selection = this.selectRole(body.taskDescription, body.context);
-    
-    if (!selection) {
+    const result = await getOrchestraEngine().handleRequest(
+      body.sessionKey,
+      body.taskDescription,
+      this.config.roles[0]?.model ?? this.config.defaultOrchestratorModel,
+      body.context ? [{ role: "context", content: JSON.stringify(body.context) }] : undefined,
+    );
+
+    const providers = context.providers ?? [];
+    const available = providers.length === 0 || providers.some((provider) =>
+      provider.enabled !== false && provider.models?.some((model) =>
+        model === result.model || model.split("/").pop() === result.model.split("/").pop()
+      )
+    );
+    if (!available) {
       context.sendJson(context.response, 404, {
-        error: { message: "No suitable role found for this task." },
+        error: "Selected role model is not available",
+        availableModels: (context.providers ?? []).flatMap((provider) =>
+          provider.enabled === false ? [] : (provider.models ?? []).map((model) => ({ id: model, displayName: model, provider: provider.name }))
+        )
       });
       return;
     }
 
-    // Apply the role's model to the session
-    const sessionManager = getSessionModelBindingManager();
-    sessionManager.setCurrentModel(body.sessionKey, selection.role.model);
-
     const response: RoleSelectionResponse = {
-      selectedRole: selection.role,
-      confidence: selection.confidence,
-      reason: selection.reason,
+      selectedRole: result.selectedRole,
+      confidence: result.confidence ?? 0.5,
+      reason: result.reason ?? "Selected by the configured Orchestra classifier or trigger fallback.",
     };
 
     context.sendJson(context.response, 200, response);
   }
 
-  /**
-   * Select the most appropriate role based on task description
-   * Uses a simple trigger-matching algorithm
-   * In production, this could call the orchestrator model
-   */
-  private selectRole(
-    taskDescription: string,
-    context?: Record<string, unknown>
-  ): RoleSelection | undefined {
-    if (this.config.roles.length === 0) {
-      return undefined;
-    }
-
-    const lowerTask = taskDescription.toLowerCase();
-    const scores: Array<{ role: Role; score: number; matchedTriggers: string[] }> = [];
-
-    // Score each role based on trigger matches
-    for (const role of this.config.roles) {
-      let score = 0;
-      const matchedTriggers: string[] = [];
-
-      for (const trigger of role.triggers) {
-        const lowerTrigger = trigger.toLowerCase();
-        if (lowerTask.includes(lowerTrigger)) {
-          score += 1;
-          matchedTriggers.push(trigger);
-        }
-      }
-
-      // Boost score if context matches
-      if (context && Object.keys(context).length > 0) {
-        const contextStr = JSON.stringify(context).toLowerCase();
-        for (const trigger of role.triggers) {
-          if (contextStr.includes(trigger.toLowerCase())) {
-            score += 0.5;
-          }
-        }
-      }
-
-      scores.push({ role, score, matchedTriggers });
-    }
-
-    // Sort by score descending
-    scores.sort((a, b) => b.score - a.score);
-
-    const bestMatch = scores[0];
-    if (bestMatch.score === 0) {
-      // No matches, return default role (first one)
-      return {
-        role: this.config.roles[0],
-        confidence: 0.3,
-        reason: "使用默认角色，因为没有找到明确的匹配触发词",
-      };
-    }
-
-    // Calculate confidence based on score
-    const maxPossibleScore = this.config.roles.reduce(
-      (max, role) => Math.max(max, role.triggers.length),
-      0
-    );
-    const confidence = Math.min(0.95, bestMatch.score / maxPossibleScore);
-
-    return {
-      role: bestMatch.role,
-      confidence,
-      reason: `匹配触发词: ${bestMatch.matchedTriggers.join(", ")}`,
-    };
-  }
 }
 
 function orchestraPathSegments(path: string): string[] {

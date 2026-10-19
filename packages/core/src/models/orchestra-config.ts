@@ -8,6 +8,8 @@ export interface OrchestraConfig {
   roles: Role[]
 }
 
+export const ORCHESTRA_MODEL_ID = "orchestra";
+
 export interface Role {
   name: string
   model: string
@@ -26,4 +28,6 @@ export interface OrchestraResult {
   selectedRole: Role
   model: string
   systemPrompt: string
+  confidence?: number
+  reason?: string
 }

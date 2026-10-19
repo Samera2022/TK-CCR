@@ -1883,6 +1883,9 @@ export type AppConfig = {
   integrations: CcrIntegrationsConfig;
   gateway: GatewayRuntimeConfig;
   mediaTools: MediaToolsConfig;
+  modelBudget?: import("@ccr/core/models/budget-config").ModelBudgetConfig;
+  orchestra?: import("@ccr/core/models/orchestra-config").OrchestraConfig;
+  reasoning?: import("@ccr/core/models/reasoning-config").ReasoningConfig;
   launchAtLogin: boolean;
   observability: ObservabilityConfig;
   preferredProvider: string;

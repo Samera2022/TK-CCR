@@ -16,6 +16,9 @@ import {
 import { ccrRemoteControlPathPrefix, ccrRemoteControlService } from "@ccr/core/gateway/remote-control-service";
 import { ccrModelControlPathPrefix, getModelControlService } from "@ccr/core/gateway/model-control-service";
 import { ccrOrchestraPathPrefix, getOrchestraService } from "@ccr/core/gateway/orchestra-service";
+import { initializeOrchestraEngine } from "@ccr/core/gateway/features/orchestra-engine-v2";
+import { createOrchestraClassifier } from "@ccr/core/gateway/features/orchestra-classifier";
+import { getBudgetTracker } from "@ccr/core/gateway/features/budget-tracker";
 import { gatewayRuntimeConfigControlPath } from "@ccr/core/gateway/runtime-config-control";
 import { authorize, claudeCodeWifTokenPath, handleClaudeCodeWifTokenRequest, reserveApiKeyLimits } from "@ccr/core/gateway/auth/api-key-authorizer";
 import { parseJsonObject, readRequestBody, sendJson } from "@ccr/core/gateway/http/io";
@@ -66,6 +69,13 @@ export class GatewayHttpRequestHandler {
       if (!this.config || !this.plugin) {
         sendJson(response, 503, { error: { message: "Gateway service is not configured." } });
         return;
+      }
+      if (this.config.modelBudget) {
+        getBudgetTracker().updateConfig(this.config.modelBudget);
+      }
+      if (this.config.orchestra) {
+        getOrchestraService(this.config.orchestra);
+        initializeOrchestraEngine(this.config.orchestra, createOrchestraClassifier(this.config.Providers));
       }
 
       const requestUrl = new URL(request.url ?? "/", this.status.endpoint || "http://127.0.0.1");
@@ -149,6 +159,10 @@ export class GatewayHttpRequestHandler {
         await modelControlService.handleRequest({
           endpoint: this.status.endpoint,
           path,
+          providers: this.config.Providers,
+          virtualModelProfiles: this.config.virtualModelProfiles,
+          orchestraEnabled: this.config.orchestra?.enabled,
+          defaultReasoningEffort: this.config.reasoning?.defaultEffort,
           readBody: readRequestBody,
           request,
           response,
@@ -166,6 +180,7 @@ export class GatewayHttpRequestHandler {
         await orchestraService.handleRequest({
           endpoint: this.status.endpoint,
           path,
+          providers: this.config.Providers,
           readBody: readRequestBody,
           request,
           response,

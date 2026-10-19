@@ -16,6 +16,7 @@ export class BudgetTracker {
     request: BudgetConfirmationRequest;
     timestamp: number;
   }>();
+  private overBudgetAllowances = new Set<string>();
 
   constructor(config: ModelBudgetConfig) {
     this.budgetConfig = config;
@@ -62,22 +63,32 @@ export class BudgetTracker {
   /**
    * Get budget state for a session and model
    */
-  getBudgetState(sessionKey: string, model: string): BudgetState {
-    const key = `${sessionKey}:${model}`;
+  getBudgetState(sessionKey: string, model?: string): BudgetState {
+    const resolvedModel = model ?? this.getCurrentModel(sessionKey) ?? "unknown";
+    const key = `${sessionKey}:${resolvedModel}`;
     const usage = this.usageMap.get(key);
     const used = usage?.totalTokens || 0;
 
     // Get budget for this specific model or use default
-    const modelBudget = this.budgetConfig.models[model];
+    const modelBudget = this.budgetConfig.models[resolvedModel];
     const budget = modelBudget?.budget || this.budgetConfig.defaultBudget;
 
     return {
-      model,
+      model: resolvedModel,
       budget,
       used,
       remaining: Math.max(0, budget - used),
       percentage: budget > 0 ? (used / budget) * 100 : 0,
     };
+  }
+
+  getModelBudget(model: string): number {
+    return this.budgetConfig.models[model]?.budget ?? this.budgetConfig.defaultBudget;
+  }
+
+  isBudgetExceeded(sessionKey: string, model?: string): boolean {
+    const state = this.getBudgetState(sessionKey, model);
+    return state.model !== "unknown" && state.used >= state.budget;
   }
 
   /**
@@ -135,6 +146,14 @@ export class BudgetTracker {
     return true;
   }
 
+  isOverBudgetAllowed(sessionKey: string, model: string): boolean {
+    return this.overBudgetAllowances.has(`${sessionKey}:${model}`);
+  }
+
+  allowOverBudget(sessionKey: string, model: string): void {
+    this.overBudgetAllowances.add(`${sessionKey}:${model}`);
+  }
+
   /**
    * Clear pending confirmation
    */
@@ -156,6 +175,11 @@ export class BudgetTracker {
     return result;
   }
 
+  getCurrentModel(sessionKey: string): string | undefined {
+    return this.getSessionUsage(sessionKey)
+      .sort((left, right) => right.lastUpdated.getTime() - left.lastUpdated.getTime())[0]?.model;
+  }
+
   /**
    * Reset usage for a session and model
    */
@@ -163,11 +187,13 @@ export class BudgetTracker {
     if (model) {
       const key = `${sessionKey}:${model}`;
       this.usageMap.delete(key);
+      this.overBudgetAllowances.delete(key);
     } else {
       // Reset all models for this session
       for (const key of this.usageMap.keys()) {
         if (key.startsWith(`${sessionKey}:`)) {
           this.usageMap.delete(key);
+          this.overBudgetAllowances.delete(key);
         }
       }
     }

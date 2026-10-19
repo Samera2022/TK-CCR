@@ -51,6 +51,8 @@ export class OrchestraEngineV2 {
         },
         model: originalModel,
         systemPrompt: '',
+        confidence: 1,
+        reason: 'Orchestra mode is disabled.',
       };
     }
 
@@ -67,6 +69,8 @@ export class OrchestraEngineV2 {
       selectedRole: selection.role,
       model: selection.role.model,
       systemPrompt: selection.role.systemPrompt,
+      confidence: selection.confidence,
+      reason: selection.reason,
     };
   }
 
@@ -193,7 +197,7 @@ export function getOrchestraEngine(): OrchestraEngineV2 {
     // Default configuration with orchestra disabled
     globalOrchestraEngine = new OrchestraEngineV2({
       enabled: false,
-      defaultOrchestratorModel: 'anthropic/claude-sonnet-4.5',
+      defaultOrchestratorModel: 'gpt-6-sol',
       roles: [],
     });
   }

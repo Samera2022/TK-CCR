@@ -310,6 +310,21 @@ export async function loadAppConfig(): Promise<AppConfig> {
         ...(picked.mediaTools ?? {}),
         allowedInputRoots: picked.mediaTools?.allowedInputRoots ?? DEFAULT_CONFIG.mediaTools.allowedInputRoots
       },
+      modelBudget: {
+        defaultBudget: picked.modelBudget?.defaultBudget ?? DEFAULT_CONFIG.modelBudget?.defaultBudget ?? 1_000_000,
+        warningThreshold: picked.modelBudget?.warningThreshold ?? DEFAULT_CONFIG.modelBudget?.warningThreshold ?? 90,
+        models: picked.modelBudget?.models ?? DEFAULT_CONFIG.modelBudget?.models ?? {}
+      },
+      orchestra: {
+        enabled: picked.orchestra?.enabled ?? DEFAULT_CONFIG.orchestra?.enabled ?? false,
+        defaultOrchestratorModel: picked.orchestra?.defaultOrchestratorModel ?? DEFAULT_CONFIG.orchestra?.defaultOrchestratorModel ?? "gpt-5.6-sol",
+        roles: picked.orchestra?.roles ?? DEFAULT_CONFIG.orchestra?.roles ?? []
+      },
+      reasoning: {
+        enabled: picked.reasoning?.enabled ?? DEFAULT_CONFIG.reasoning?.enabled ?? true,
+        defaultEffort: picked.reasoning?.defaultEffort ?? DEFAULT_CONFIG.reasoning?.defaultEffort ?? "",
+        models: picked.reasoning?.models ?? DEFAULT_CONFIG.reasoning?.models ?? {}
+      },
       observability: {
         ...DEFAULT_CONFIG.observability,
         ...(picked.observability ?? {})
@@ -794,6 +809,18 @@ function pickConfig(value: Partial<AppConfig>): LoadedAppConfig {
   const providers = parseProviders((value as Record<string, unknown>).Providers ?? (value as Record<string, unknown>).providers);
   if (providers) {
     config.Providers = providers;
+  }
+  const modelBudget = (value as Record<string, unknown>).modelBudget;
+  if (isObject(modelBudget)) {
+    config.modelBudget = modelBudget as unknown as AppConfig["modelBudget"];
+  }
+  const orchestra = (value as Record<string, unknown>).orchestra;
+  if (isObject(orchestra)) {
+    config.orchestra = orchestra as unknown as AppConfig["orchestra"];
+  }
+  const reasoning = (value as Record<string, unknown>).reasoning;
+  if (isObject(reasoning)) {
+    config.reasoning = reasoning as unknown as AppConfig["reasoning"];
   }
   if (Array.isArray((value as Record<string, unknown>).providerPlugins)) {
     config.providerPlugins = (value as Record<string, unknown>).providerPlugins as unknown[];

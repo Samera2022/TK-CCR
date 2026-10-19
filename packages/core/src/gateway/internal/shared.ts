@@ -278,6 +278,8 @@ export const localObservabilityHeaderNames = new Set([
   "x-ccr-openrouter-discount-model",
   "x-ccr-openrouter-discount-provider-id",
   "x-ccr-cursor-openai-compat",
+  "x-ccr-reasoning-effort",
+  "x-ccr-reasoning-source",
   "x-ccr-logical-provider",
   "x-ccr-provider-credential-chain",
   "x-ccr-provider-credential-saturated"

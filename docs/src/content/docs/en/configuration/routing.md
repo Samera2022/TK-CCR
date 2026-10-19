@@ -524,3 +524,61 @@ After saving, send a request and inspect Logs:
 - status code and error details.
 
 When Fallback runs, response headers include `x-ccr-fallback-attempts`, `x-ccr-fallback-failures`, `x-ccr-fallback-delays-ms` for delayed attempts, and the final `x-ccr-fallback-model`. Request log details also show the related retry attempt list.
+
+## Reasoning effort
+
+CCR can decide how much thinking a request may spend and rewrite the request body to match. The value is resolved once per request, then projected onto the protocol the client used:
+
+- `openai_responses`: `reasoning.effort`
+- `openai_chat_completions`: `reasoning_effort`
+- `anthropic_messages`: `thinking.budget_tokens`, capped so it stays below `max_tokens`
+
+The levels are `none`, `minimal`, `low`, `medium`, `high`, and `xhigh`. `none` removes the reasoning field instead of guessing a small value.
+
+### Resolution order
+
+The first match wins:
+
+1. The `x-ccr-reasoning-effort` request header.
+2. The session binding set through the model-control API.
+3. The per-model override in `reasoning.models`.
+4. `reasoning.defaultEffort`, applied only when the client sent no reasoning value of its own.
+
+Because of step 4, a configured default never silently downgrades an effort the client already selected. Levels a model does not advertise are snapped to the nearest advertised one, and a level outside a model's range is recorded in the Logs route trace under `reasoning.effort`.
+
+### Configuration
+
+```json
+{
+  "reasoning": {
+    "enabled": true,
+    "defaultEffort": "",
+    "models": {
+      "gpt-6-astra": "xhigh",
+      "deepseek-v4.1-flash": "medium"
+    }
+  }
+}
+```
+
+Set `enabled` to `false` to leave every request body untouched.
+
+### Session control API
+
+```bash
+# Read the current effort for a session
+curl -H "Authorization: Bearer $CCR_API_KEY" \
+  http://127.0.0.1:3456/__ccr/model-control/v1/reasoning/codex:01a1...
+
+# Set it
+curl -H "Authorization: Bearer $CCR_API_KEY" -H "Content-Type: application/json" \
+  -d '{"sessionKey":"codex:01a1...","effort":"high"}' \
+  http://127.0.0.1:3456/__ccr/model-control/v1/reasoning
+
+# Reset to the configured default
+curl -H "Authorization: Bearer $CCR_API_KEY" -H "Content-Type: application/json" \
+  -d '{"sessionKey":"codex:01a1...","effort":"reset"}' \
+  http://127.0.0.1:3456/__ccr/model-control/v1/reasoning
+```
+
+An accepted change is echoed back on the response headers `x-ccr-reasoning-effort` and `x-ccr-reasoning-source` (`header`, `session`, `model`, or `default`) for the affected request.

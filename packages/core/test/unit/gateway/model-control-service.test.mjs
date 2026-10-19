@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { getModelControlService, ccrModelControlPathPrefix } from "@ccr/core/gateway/model-control-service";
 import { getSessionModelBindingManager } from "@ccr/core/gateway/session-model-binding";
 import { getBudgetTracker } from "@ccr/core/gateway/budget-tracker";
+import { getSessionReasoningBindingManager } from "@ccr/core/gateway/session-reasoning-binding";
 
 describe("ModelControlService", () => {
   let service;
@@ -152,6 +153,107 @@ describe("ModelControlService", () => {
       },
     };
 
+    await service.handleRequest(mockContext);
+  });
+
+  it("should clear a pending budget confirmation after continue", async () => {
+    const sessionKey = "codex:budget-confirm-session";
+    const model = "gpt-5.6-sol";
+    const budgetTracker = getBudgetTracker();
+    budgetTracker.updateConfig({ defaultBudget: 100, warningThreshold: 100, models: {} });
+    budgetTracker.resetUsage(sessionKey, model);
+    budgetTracker.recordUsage(sessionKey, model, 100, 0);
+    budgetTracker.createConfirmationRequest(sessionKey, model, "/v1/responses");
+    assert.equal(budgetTracker.hasPendingConfirmation(sessionKey, model), true);
+
+    const requestBody = {
+      action: "continue",
+      sessionKey,
+      model,
+    };
+    const mockContext = {
+      endpoint: "http://localhost:3000",
+      path: `${ccrModelControlPathPrefix}/budget-confirm`,
+      readBody: async () => Buffer.from(JSON.stringify(requestBody)),
+      request: { method: "POST" },
+      response: {},
+      sendJson: (response, statusCode, payload) => {
+        assert.equal(statusCode, 200);
+        assert.equal(payload.action, "continue");
+      },
+    };
+
+    await service.handleRequest(mockContext);
+    assert.equal(budgetTracker.hasPendingConfirmation(sessionKey, model), false);
+    assert.equal(budgetTracker.isOverBudgetAllowed(sessionKey, model), true);
+    budgetTracker.resetUsage(sessionKey, model);
+  });
+
+  it("should set and report a session reasoning effort", async () => {
+    const sessionKey = "codex:reasoning-api-session";
+    const reasoningManager = getSessionReasoningBindingManager();
+    reasoningManager.clearBinding(sessionKey);
+
+    const setContext = {
+      endpoint: "http://localhost:3000",
+      path: `${ccrModelControlPathPrefix}/reasoning`,
+      readBody: async () => Buffer.from(JSON.stringify({ effort: "xhigh", sessionKey })),
+      request: { method: "POST" },
+      response: {},
+      sendJson: (response, statusCode, payload) => {
+        assert.equal(statusCode, 200);
+        assert.equal(payload.success, true);
+        assert.equal(payload.effort, "xhigh");
+        assert.ok(payload.levels.includes("xhigh"));
+      },
+    };
+    await service.handleRequest(setContext);
+    assert.equal(reasoningManager.getEffort(sessionKey), "xhigh");
+
+    const queryContext = {
+      defaultReasoningEffort: "medium",
+      endpoint: "http://localhost:3000",
+      path: `${ccrModelControlPathPrefix}/reasoning/${sessionKey}`,
+      readBody: async () => Buffer.from(""),
+      request: { method: "GET" },
+      response: {},
+      sendJson: (response, statusCode, payload) => {
+        assert.equal(statusCode, 200);
+        assert.equal(payload.effort, "xhigh");
+        assert.equal(payload.source, "session");
+      },
+    };
+    await service.handleRequest(queryContext);
+
+    const resetContext = {
+      defaultReasoningEffort: "medium",
+      endpoint: "http://localhost:3000",
+      path: `${ccrModelControlPathPrefix}/reasoning`,
+      readBody: async () => Buffer.from(JSON.stringify({ effort: "reset", sessionKey })),
+      request: { method: "POST" },
+      response: {},
+      sendJson: (response, statusCode, payload) => {
+        assert.equal(statusCode, 200);
+        assert.equal(payload.previousEffort, "xhigh");
+        assert.equal(payload.effort, "medium");
+      },
+    };
+    await service.handleRequest(resetContext);
+    assert.equal(reasoningManager.getEffort(sessionKey), undefined);
+  });
+
+  it("should reject an unsupported reasoning effort", async () => {
+    const mockContext = {
+      endpoint: "http://localhost:3000",
+      path: `${ccrModelControlPathPrefix}/reasoning`,
+      readBody: async () => Buffer.from(JSON.stringify({ effort: "turbo", sessionKey: "codex:x" })),
+      request: { method: "POST" },
+      response: {},
+      sendJson: (response, statusCode, payload) => {
+        assert.equal(statusCode, 400);
+        assert.ok(payload.error.message.includes("Unsupported reasoning effort"));
+      },
+    };
     await service.handleRequest(mockContext);
   });
 });
